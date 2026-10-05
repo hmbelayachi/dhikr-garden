@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Dhikr Garden Grower</title>
+  <meta name="description" content="Grow a garden with every dhikr. A gentle remembrance counter and garden game.">
+  <meta name="theme-color" content="#0d4a36">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Dhikr Garden">
+  <!-- Fonts only — no other external requests at runtime -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app">
+    <main id="screens">
+      <section class="screen" id="screen-home" aria-label="Home"></section>
+      <section class="screen" id="screen-practice" aria-label="Practice"></section>
+      <section class="screen" id="screen-daily" aria-label="Daily rhythm"></section>
+      <section class="screen" id="screen-learn" aria-label="Learning path"></section>
+      <section class="screen" id="screen-herbarium" aria-label="Herbarium"></section>
+      <section class="screen" id="screen-articles" aria-label="Articles"></section>
+      <section class="screen" id="screen-reader" aria-label="Article reader"></section>
+      <section class="screen" id="screen-progress" aria-label="Progress"></section>
+      <section class="screen" id="screen-getting-started" aria-label="Getting started"></section>
+    </main>
+
+    <nav id="bottomnav" aria-label="Main navigation">
+      <button class="navbtn" data-screen="home" aria-label="Home">
+        <span class="navicon" aria-hidden="true">🏡</span><span class="navlabel">Home</span>
+      </button>
+      <button class="navbtn" data-screen="practice" aria-label="Practice">
+        <span class="navicon" aria-hidden="true">📿</span><span class="navlabel">Practice</span>
+      </button>
+      <button class="navbtn" data-screen="daily" aria-label="Daily rhythm">
+        <span class="navicon" aria-hidden="true">☀️</span><span class="navlabel">Daily</span>
+      </button>
+      <button class="navbtn" data-screen="herbarium" aria-label="Herbarium">
+        <span class="navicon" aria-hidden="true">🌸</span><span class="navlabel">Garden book</span>
+      </button>
+      <button class="navbtn" data-screen="more" aria-label="More sections">
+        <span class="navicon" aria-hidden="true">⋯</span><span class="navlabel">More</span>
+      </button>
+    </nav>
+
+    <!-- "More" bottom sheet -->
+    <div id="moresheet" class="sheet-backdrop" hidden>
+      <div class="sheet" role="dialog" aria-label="More sections">
+        <button class="sheetbtn" data-screen="learn"><span aria-hidden="true">📖</span> Learning Path</button>
+        <button class="sheetbtn" data-screen="articles"><span aria-hidden="true">📰</span> Articles</button>
+        <button class="sheetbtn" data-screen="progress"><span aria-hidden="true">📊</span> Progress</button>
+        <button class="sheetbtn" data-screen="getting-started"><span aria-hidden="true">🌱</span> Getting Started</button>
+        <button class="sheetbtn sheet-cancel" id="sheetclose">Close</button>
+      </div>
+    </div>
+
+    <!-- Celebration / toast modal -->
+    <div id="modal" class="modal-backdrop" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="Celebration">
+        <div class="modal-emoji" id="modal-emoji" aria-hidden="true">🌸</div>
+        <h2 class="modal-title" id="modal-title">A new bloom!</h2>
+        <p class="modal-sub" id="modal-sub"></p>
+        <button class="btn-gold" id="modal-ok">Alhamdulillah 🤲</button>
+      </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+
+  <!-- Content data (written by a separate process); the app runs without it. -->
+  <script src="content/data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
