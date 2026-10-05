@@ -601,9 +601,7 @@ function dhikrStage(dh) {
   return null;
 }
 function dhikrLocked(dh) {
-  var found = dhikrStage(dh);
-  if (!found) return false;
-  return !stageUnlocked(found.stage);
+  return false; /* No locks on the Practice list: every remembrance is always pickable. */
 }
 
 /* ---------------- UI primitives ---------------- */
@@ -992,7 +990,7 @@ function practiceOptions() {
   if (stages.length) {
     for (var s = 0; s < stages.length; s++) {
       var st = stages[s];
-      var unlocked = stageUnlocked(st);
+      var unlocked = true; /* Practice dropdown never locks: all remembrances pickable. */
       var ids = stageDhikrIds(st);
       var meta = stageMeta(st);
       html += '<optgroup label="' + esc(meta.title) + (unlocked ? '' : ' 🔒 (' + (Number(st.sessionsRequired) || 0) + ' sessions)') + '">';
