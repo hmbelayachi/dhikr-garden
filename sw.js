@@ -9,19 +9,19 @@ var SHELL = [
   'index.html',
   'styles.css',
   'app.js',
-  'content/data.js',
+  'data.js',
   'manifest.webmanifest',
-  'icons/icon-192.png',
-  'icons/icon-512.png',
-  'icons/icon-maskable-512.png',
-  'icons/apple-touch-icon.png'
+  'icon-192.png',
+  'icon-512.png',
+  'icon-maskable-512.png',
+  'apple-touch-icon.png'
 ];
 
 self.addEventListener('install', function (event) {
   event.waitUntil(
     caches.open(CACHE).then(function (cache) {
       // addAll is all-or-nothing per batch; add individually so one missing
-      // file (e.g. content/data.js not yet written) can't fail the install.
+      // file (e.g. data.js not yet written) can't fail the install.
       return Promise.all(SHELL.map(function (url) {
         return cache.add(url).catch(function () { /* tolerate missing */ });
       }));

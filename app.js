@@ -1,7 +1,7 @@
 /* =========================================================================
    Dhikr Garden Grower — app shell (vanilla JS, 100% client-side)
    -------------------------------------------------------------------------
-   CONTENT CONTRACT — content/data.js (written separately) sets window.DG_CONTENT.
+   CONTENT CONTRACT — data.js (written separately) sets window.DG_CONTENT.
    The app tolerates it being missing/partial, and reads BOTH key families:
 
    Provisional keys:  dhikr[], unlockStages[] (+dhikrIds), tahlilSpecials{},
@@ -207,13 +207,15 @@ var S = {
   location: safeGet('dg_location', null),      // null=never asked | {granted:bool,lat,lon}
   milestones: safeGet('dg_milestones', {}),    // {key:true}
   announced: safeGet('dg_announced', []),       // [flowerId...] matured-notified
-  lastOpened: safeGet('dg_lastOpened', 0)
+  lastOpened: safeGet('dg_lastOpened', 0),
+  dayCounts: safeGet('dg_daycounts', {})        // {"YYYY-MM-DD": recitations that day} (for the "today" badge)
 };
 if (typeof S.sessions !== 'number') S.sessions = 0;
 if (typeof S.lifetime !== 'number') S.lifetime = 0;
 if (!Array.isArray(S.garden)) S.garden = [];
 if (!Array.isArray(S.general)) S.general = [];
 if (!Array.isArray(S.announced)) S.announced = [];
+if (!S.dayCounts || typeof S.dayCounts !== 'object' || Array.isArray(S.dayCounts)) S.dayCounts = {};
 
 function saveState() {
   safeSet('dg_totals', S.totals);
@@ -545,8 +547,16 @@ function addDhikrCount(dh, n) {
   S.totals[dh.id] = (Number(S.totals[dh.id]) || 0) + n;
   if (n > (Number(S.best[dh.id]) || 0)) S.best[dh.id] = n;
   S.lifetime += n;
+  var dk = todayKey();
+  S.dayCounts[dk] = (Number(S.dayCounts[dk]) || 0) + n;
+  safeSet('dg_daycounts', S.dayCounts);
   saveState();
   checkMilestones(dh, n);
+}
+
+/* recitations logged today (drives the gold "N today" badge) */
+function todayCount() {
+  return Number(S.dayCounts[todayKey()]) || 0;
 }
 
 /* ---------------- unlock stages ----------------
@@ -611,7 +621,6 @@ function showScreen(name) {
   for (var j = 0; j < navs.length; j++) {
     navs[j].classList.toggle('active', navs[j].getAttribute('data-screen') === name);
   }
-  closeSheet();
   try { window.scrollTo(0, 0); } catch (e) { /* scroll optional */ }
   try {
     var fn = { home: renderHome, practice: renderPractice, daily: renderDaily,
@@ -621,8 +630,6 @@ function showScreen(name) {
   } catch (e) { /* a screen must never break navigation */ }
 }
 
-function openSheet() { var s = el('moresheet'); if (s) s.hidden = false; }
-function closeSheet() { var s = el('moresheet'); if (s) s.hidden = true; }
 
 var modalQueue = [];
 function celebrate(opts) {
@@ -650,25 +657,6 @@ function toast(msg, ms) {
 /* ---------------- HOME ---------------- */
 function arabicBlock(text, cls) {
   return '<div class="arabic ' + (cls || 'arabic-mid') + '" dir="rtl" lang="ar">' + esc(text) + '</div>';
-}
-
-function renderGardenGrid(limit) {
-  var now = Date.now();
-  var flowers = S.garden.slice(-(limit || 24)).reverse();
-  if (!flowers.length) {
-    return '<div class="garden-empty">Your garden is empty — finish a practice session<br>to plant your first flower 🌱</div>';
-  }
-  var html = '<div class="garden-grid">';
-  for (var i = 0; i < flowers.length; i++) {
-    var f = flowers[i];
-    var st = growthStage(f, now);
-    html += '<div class="plot ' + (st === 2 ? 'bloomed' : 'growing') + '" title="' + esc(f.name) + '">' +
-      '<span class="stage-tag">' + (st === 2 ? '🌸' : st === 1 ? '🌿' : '🌱') + '</span>' +
-      '<div style="font-size:1.9rem;line-height:1.1">' + esc(stageEmoji(f, now)) + '</div>' +
-      '<div class="pname">' + esc(f.name) + '</div></div>';
-  }
-  html += '</div>';
-  return html;
 }
 
 function nextRewardInfo() {
@@ -714,33 +702,185 @@ function nextRewardInfo() {
   return bestC;
 }
 
+/* next unearned milestone for one specific dhikr (drives the practice card pill + "Next:" line) */
+function nextMilestoneFor(dh) {
+  if (!dh) return null;
+  var cands = [];
+  var total = Number(S.totals[dh.id]) || 0;
+  var best = Number(S.best[dh.id]) || 0;
+  var k, tier;
+  for (k = 0; k < MILESTONE_TIERS.length; k++) {
+    tier = MILESTONE_TIERS[k];
+    if (!S.milestones['c:' + dh.id + ':' + tier])
+      cands.push({ threshold: tier, current: total, kind: 'cumulative' });
+    if (!S.milestones['s:' + dh.id + ':' + tier])
+      cands.push({ threshold: tier, current: best, kind: 'single' });
+  }
+  var tahlil = findTahlil();
+  if (tahlil && tahlil.id === dh.id) {
+    var sp = getSpecials();
+    ['10000', '70000'].forEach(function (T) {
+      if (!S.milestones['sp:' + dh.id + ':' + T])
+        cands.push({ threshold: Number(T), current: total, kind: 'special', flower: sp[T] });
+    });
+  }
+  var bestC = null;
+  for (var i = 0; i < cands.length; i++) {
+    var rem = cands[i].threshold - cands[i].current;
+    if (rem <= 0) continue;
+    if (!bestC || rem < bestC.remaining) {
+      var fl = cands[i].flower || milestoneFlower(dh, cands[i].threshold, cands[i].kind);
+      bestC = { remaining: rem, threshold: cands[i].threshold, current: cands[i].current,
+                kind: cands[i].kind, flower: fl };
+    }
+  }
+  return bestC;
+}
+
 function renderNextReward() {
   var nr = nextRewardInfo();
   if (!nr) {
-    return '<div class="card"><span class="kicker">Next reward</span>' +
-      '<h2>🌟 Garden complete!</h2><p class="muted">Every bloom discovered. May your garden keep growing with every remembrance.</p></div>';
+    return '<div class="card"><span class="kicker k-gold">Next reward</span>' +
+      '<h2>Garden complete</h2><p class="muted">Every bloom discovered. May your garden keep growing with every remembrance.</p></div>';
   }
   var pct = Math.min(100, Math.max(0, (nr.current / nr.threshold) * 100));
   var dhName = nr.dhikr ? (nr.dhikr.transliteration || nr.dhikr.id) : 'lifetime dhikr';
-  var kindLabel = nr.kind === 'single' ? 'in one sitting' : nr.kind === 'secret' ? 'total' : 'total';
-  return '<div class="card"><span class="kicker">Next reward</span>' +
-    '<div style="display:flex;gap:14px;align-items:center">' +
-    '<div style="font-size:3rem">' + esc(nr.flower.emoji) + '</div>' +
-    '<div style="flex:1"><h3 style="margin:0 0 2px">' + esc(nr.flower.name) + '</h3>' +
-    '<div class="muted"><b>' + fmtNum(nr.remaining) + '</b> more ' + esc(dhName) + ' ' + esc(kindLabel) + '</div>' +
-    '<div class="muted" style="font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-600);font-weight:800">' +
-    esc(nr.flower.rarity || '') + '</div></div></div>' +
+  var kindLabel = nr.kind === 'single' ? 'in one sitting' : 'cumulative';
+  return '<div class="card"><span class="kicker k-gold">Next reward</span>' +
+    '<div class="nr-card"><div class="nr-ico">' + esc(nr.flower.emoji) + '</div>' +
+    '<div class="nr-body"><h3>' + esc(nr.flower.name) + '</h3>' +
+    '<div class="nr-sub">' + fmtNum(nr.remaining) + ' more ' + esc(dhName) + ' &middot; ' + esc(kindLabel) + '</div>' +
+    '<div class="nr-rarity">' + esc(nr.flower.rarity || '') + '</div></div>' +
+    '<button class="nr-go" data-go="practice">Go</button></div>' +
     '<div class="pbar"><i style="width:' + pct.toFixed(1) + '%"></i></div>' +
     '<div class="pbar-label"><span>' + fmtNum(nr.current) + '</span><span>' + fmtNum(nr.threshold) + '</span></div></div>';
 }
 
-function locationCard() {
-  if (S.location !== null) return ''; // asked once already
-  return '<div class="card" id="loccard"><span class="kicker">Prayer-time ambience</span>' +
-    '<h3>🕌 Tune the garden to your day</h3>' +
-    '<p class="muted">Share your location <b>once</b> and the app will show prayer times and tint the garden by time of day. It stays on your phone — nothing is sent anywhere.</p>' +
-    '<div class="btn-row"><button class="btn-green" id="loc-yes">Share location</button>' +
-    '<button class="btn-ghost" id="loc-no">Not now</button></div></div>';
+/* Illustrated garden scene for the home hero: night sky, sun, soil mound,
+   the gardener's latest bloom at center, dotted ghost-flower outlines. */
+function gardenScene() {
+  var stars = '';
+  var pts = [[6, 12], [18, 30], [32, 8], [47, 22], [60, 10], [74, 28], [88, 14], [12, 48], [94, 44], [40, 40]];
+  for (var i = 0; i < pts.length; i++) {
+    stars += '<i style="left:' + pts[i][0] + '%;top:' + pts[i][1] + '%"></i>';
+  }
+  var latest = null;
+  for (var g = S.garden.length - 1; g >= 0; g--) {
+    if (S.garden[g] && S.garden[g].emoji) { latest = S.garden[g].emoji; break; }
+  }
+  var ghosts = '<div class="gs-ghost" style="left:18%;bottom:52px"><div class="gf-head"></div><div class="gf-stem"></div></div>' +
+    '<div class="gs-ghost" style="left:34%;bottom:60px"><div class="gf-head"></div><div class="gf-stem"></div></div>' +
+    '<div class="gs-ghost" style="left:68%;bottom:58px"><div class="gf-head"></div><div class="gf-stem"></div></div>' +
+    '<div class="gs-ghost" style="left:83%;bottom:50px"><div class="gf-head"></div><div class="gf-stem"></div></div>';
+  return '<div class="garden-scene" aria-hidden="true"><div class="gs-stars">' + stars + '</div>' +
+    '<div class="gs-sun"></div>' + ghosts +
+    '<div class="gs-stem" style="left:50%;height:56px"></div>' +
+    '<div class="gs-flower" style="left:50%;bottom:88px">' + esc(latest || '🌸') + '</div>' +
+    '<div class="gs-soil"></div></div>';
+}
+
+/* line-icon SVGs for the Explore section cards */
+var SEC_ICONS = {
+  practice: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>',
+  daily: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M9 15l2 2 4-4"/></svg>',
+  learn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h13"/></svg>',
+  herbarium: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8"/><path d="M12 13c0-3.5 2.5-6 6-6 0 3.5-2.5 6-6 6z"/><path d="M12 13c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z"/></svg>',
+  articles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v6h6M9 13h7M9 17h7"/></svg>',
+  progress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>'
+};
+
+function sectionGrid() {
+  var list = getDhikr();
+  var practiced = 0, i;
+  for (i = 0; i < list.length; i++) { if ((Number(S.totals[list[i].id]) || 0) > 0) practiced++; }
+  var discovered = Object.keys(S.herbarium).length;
+  var totalKeys = herbariumTotals().length;
+  var items = [
+    ['practice', 'Practice', 'Count a dhikr', '#7bc496'],
+    ['daily', 'Daily rhythm', 'Morning & evening', '#f0a05a'],
+    ['learn', 'Learning path', practiced + '/' + list.length + ' practiced', '#7fb5e8'],
+    ['herbarium', 'Herbarium', discovered + '/' + totalKeys + ' discovered', '#e08ac0'],
+    ['articles', 'Articles', getArticles().length + ' pages', '#f0a05a'],
+    ['progress', 'Progress', fmtNum(S.lifetime) + ' lifetime', '#7fb5e8']
+  ];
+  var html = '<span class="kicker k-sage">Explore</span><h2 class="giant-sm">Open a section</h2><div class="sec-grid">';
+  for (i = 0; i < items.length; i++) {
+    html += '<button class="sec-card" data-go="' + items[i][0] + '" style="--edge:' + items[i][3] + '">' +
+      '<span class="sec-ico">' + (SEC_ICONS[items[i][0]] || '') + '</span>' +
+      '<span class="sec-txt"><b>' + esc(items[i][1]) + '</b><i>' + esc(items[i][2]) + '</i></span></button>';
+  }
+  return html + '</div>';
+}
+
+/* Herbarium collection preview: featured dhikr's base + cumulative ladder */
+function herbariumPreview() {
+  var dh = findTahlil() || getDhikr()[0];
+  if (!dh) return '';
+  var slots = [
+    { key: 'base:' + dh.id, label: 'First bloom', flower: baseFlower(dh) },
+    { key: 'm:c:' + dh.id + ':100', label: '100 cumulative', flower: milestoneFlower(dh, 100, 'cumulative') },
+    { key: 'm:c:' + dh.id + ':500', label: '500 cumulative', flower: milestoneFlower(dh, 500, 'cumulative') },
+    { key: 'm:c:' + dh.id + ':1000', label: '1000 cumulative', flower: milestoneFlower(dh, 1000, 'cumulative') }
+  ];
+  var html = '<div class="card"><span class="kicker k-sage">Collection preview</span>' +
+    '<div class="row-between"><h2>Herbarium</h2><button class="link-arrow" data-go="herbarium">Open &rarr;</button></div>' +
+    '<div class="herb-prev-grid">';
+  for (var i = 0; i < slots.length; i++) {
+    var known = S.herbarium[slots[i].key];
+    var fl = slots[i].flower || {};
+    html += '<div class="herb-tile"><div class="ht-emoji' + (known ? '' : ' dim') + '">' +
+      (known ? esc(known.emoji || fl.emoji || '🌸') : '?') + '</div>' +
+      '<div class="ht-name">' + (known ? esc(known.name || fl.name || '') : '???') + '</div>' +
+      '<div class="ht-sub">' + (known ? esc(dh.transliteration || '') : esc(slots[i].label)) + '</div></div>';
+  }
+  return html + '</div></div>';
+}
+
+/* compact daily-rhythm preview for home (taps through to the Daily screen) */
+function dailyPreview() {
+  var daily = getDaily();
+  var mItems = daily.morning || [], eItems = daily.evening || [];
+  var day = checklistDay();
+  function doneCount(items, rec) {
+    var n = 0;
+    for (var i = 0; i < items.length; i++) { if (rec && rec[i]) n++; }
+    return n;
+  }
+  var mDone = doneCount(mItems, day.morning), eDone = doneCount(eItems, day.evening);
+  var html = '<div class="card"><span class="kicker k-gold">Today&rsquo;s gentle rhythm</span>' +
+    '<div class="row-between"><h2>Morning &amp; evening</h2><button class="link-arrow" data-go="daily">View all &rarr;</button></div>' +
+    '<div class="tabs" style="margin-top:10px">' +
+    '<button class="tab active" data-goto-daily="morning"><span>Morning</span><b>' + mDone + '/' + mItems.length + '</b></button>' +
+    '<button class="tab" data-goto-daily="evening"><span>Evening</span><b>' + eDone + '/' + eItems.length + '</b></button></div>';
+  var shown = mItems.slice(0, 2);
+  for (var i = 0; i < shown.length; i++) {
+    var it = shown[i] || {};
+    var checked = !!(day.morning && day.morning[i]);
+    html += '<div class="check-row' + (checked ? ' done' : '') + '" data-goto-daily="morning" style="cursor:pointer">' +
+      '<span class="bigcheck" style="display:block;' + (checked ? 'background:var(--gold);border-color:var(--gold)' : '') + '">' +
+      (checked ? '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--gold-ink);font-size:1.8rem;font-weight:900">✓</span>' : '') + '</span>' +
+      '<div class="check-body">' + (it.arabic ? arabicBlock(it.arabic, 'arabic-mid') : '') +
+      (it.count ? '<span class="check-count">&times;' + esc(it.count) + '</span>' : '') + '</div></div>';
+  }
+  return html + '</div>';
+}
+
+/* atmosphere card (folds in prayer info + the once-only location prompt) */
+function atmosphereCard(now, np, season, hijri) {
+  var prayerName = '';
+  if (np && np.prev) prayerName = np.prev.name;
+  else if (np && np.cur) prayerName = np.cur.name;
+  var html = '<div class="card"><span class="kicker k-sage">Garden atmosphere</span>' +
+    '<div class="atm-row"><h2>' + esc(season && season.name ? season.name : 'Everyday garden') + '</h2>' +
+    '<div class="atm-time">' + esc(fmtClock(now)) + (prayerName ? '<span>' + esc(prayerName) + '</span>' : '') + '</div></div>' +
+    '<p class="muted" style="margin-top:8px">' + (hijri ? esc(hijri) + ' &middot; ' : '') +
+    'Lighting follows today&rsquo;s calculated prayer times.</p>';
+  if (S.location === null) {
+    html += '<div class="btn-row"><button class="btn-gold" id="loc-yes">Share location</button>' +
+      '<button class="btn-ghost" id="loc-no">Not now</button></div>' +
+      '<p class="muted" style="margin-top:8px;font-size:.8rem">Share once for accurate prayer times. It stays on your phone &mdash; nothing is sent anywhere.</p>';
+  }
+  return html + '</div>';
 }
 
 function renderHome() {
@@ -751,84 +891,67 @@ function renderHome() {
   var hijri = hijriDateString();
   var now = new Date();
   var np = nextPrayer(now);
+  var list = getDhikr();
+  var discovered = Object.keys(S.herbarium).length;
+  var totalKeys = herbariumTotals().length;
+  var practiced = 0, i;
+  for (i = 0; i < list.length; i++) { if ((Number(S.totals[list[i].id]) || 0) > 0) practiced++; }
   var html = '';
 
-  // header
-  html += '<h1 class="page-title">🌙 Dhikr Garden</h1>';
-  html += '<p class="page-sub">' + (hijri ? esc(hijri) + ' · ' : '') + 'Every remembrance plants something beautiful.</p>';
+  // header: kicker + giant title + gold "today" badge
+  html += '<span class="kicker k-sage">Your quiet patch</span>';
+  html += '<div class="home-head"><h1 class="giant">Home</h1>' +
+    '<span class="today-badge">' + fmtNum(todayCount()) + '<small>today</small></span></div>';
 
-  // seasonal banner
-  if (season) {
-    html += '<div class="season-banner">🌙 <b>' + esc(season.name || 'Blessed season') + '</b><br>' +
-      '<span>' + esc(season.greeting || season.note || season.description || '') + '</span></div>';
-  }
-
-  // while-you-were-away
+  // while-you-were-away (offline maturation notice)
   if (away.length) {
     var names = away.slice(0, 4).map(function (f) { return esc(f.name); }).join(', ');
     var more = away.length > 4 ? ' +' + (away.length - 4) + ' more' : '';
-    html += '<div class="notice"><span class="ntitle">🌤️ While you were away…</span>' +
+    html += '<div class="notice"><span class="ntitle">While you were away&hellip;</span>' +
       esc(String(away.length)) + ' flower' + (away.length > 1 ? 's' : '') +
       ' bloomed: ' + names + more + '</div>';
   }
 
-  // hero: the garden itself
-  html += '<div class="hero"><span class="kicker" style="color:var(--gold-400)">Your garden</span>' +
-    '<h1 style="margin:2px 0 8px">Watch it grow 🌱</h1>' + renderGardenGrid(24);
-  // prayer strip inside hero when location known
-  if (PRAYERS && S.location && S.location.granted) {
-    html += '<div class="prayer-strip" style="margin-top:10px">';
-    for (var pi = 0; pi < PRAYERS.length; pi++) {
-      var isNext = np && np.cur && PRAYERS[pi].name === np.cur.name;
-      html += '<div class="prayer-chip' + (isNext ? ' next' : '') + '"><span class="pt">' +
-        esc(PRAYERS[pi].name) + '</span>' + esc(fmtClock(PRAYERS[pi].at)) + '</div>';
-    }
-    html += '</div>';
-    if (np && np.cur) {
-      var mins = Math.round((np.cur.at - now) / 60000);
-      html += '<p style="margin:6px 0 0;font-size:.9rem">⏳ ' + esc(np.cur.name) + ' in ' +
-        (mins >= 60 ? Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm' : mins + ' min') + '</p>';
-    }
-  }
-  html += '</div>';
-
-  // location prompt (once)
-  html += locationCard();
+  // garden hero
+  html += '<section class="card garden-hero"><span class="kicker k-sage">Your garden</span>' +
+    '<h2 class="hero-title">What you remember, grows.</h2>' + gardenScene() +
+    '<div class="hero-lines"><div><b>' + discovered + '/' + totalKeys + '</b> milestone blooms</div>' +
+    '<div><b>' + fmtNum(S.lifetime) + '</b> remembrances tended</div></div>' +
+    '<div class="stat-row"><div class="stat"><b>' + discovered + '</b><span>blooms</span></div>' +
+    '<div class="stat"><b>' + fmtNum(S.lifetime) + '</b><span>lifetime</span></div>' +
+    '<div class="stat"><b>' + practiced + '</b><span>phrases</span></div></div></section>';
 
   // next reward
   html += renderNextReward();
 
-  // getting started teaser
-  html += '<div class="card"><span class="kicker">New here?</span>' +
-    '<h3>🌱 Getting Started</h3><p class="muted">Four quick steps to grow your first flower.</p>' +
-    '<button class="btn-gold" data-go="getting-started">Start here</button></div>';
+  // getting started
+  html += '<section class="card"><span class="kicker k-sage">New to the garden?</span>' +
+    '<div class="row-between"><div><h2 style="margin:0 0 4px">Getting started</h2>' +
+    '<p class="muted" style="margin:0">Learn how practice grows your garden and unlocks new blooms.</p></div>' +
+    '<button class="link-arrow" data-go="getting-started">Start &rarr;</button></div></section>';
 
-  // 2-column feature menu (Nidaa-style)
-  var items = [
-    ['practice', '📿', 'Practice'],
-    ['daily', '☀️', 'Daily Rhythm'],
-    ['learn', '📖', 'Learning Path'],
-    ['herbarium', '🌸', 'Herbarium'],
-    ['articles', '📰', 'Articles'],
-    ['progress', '📊', 'Progress']
-  ];
-  html += '<h2 style="color:#fff;margin:6px 0 10px">Open a Section</h2><div class="grid2">';
-  for (var gi = 0; gi < items.length; gi++) {
-    html += '<button class="menu-btn" data-go="' + items[gi][0] + '">' +
-      '<span class="micon">' + items[gi][1] + '</span>' + esc(items[gi][2]) + '</button>';
-  }
-  html += '</div>';
+  // daily rhythm preview
+  html += dailyPreview();
 
-  // lifetime footer stat
-  html += '<div class="card" style="text-align:center"><span class="kicker">Lifetime remembrances</span>' +
-    '<div style="font-size:2.2rem;font-weight:800;color:var(--green-900)">' + fmtNum(S.lifetime) + '</div></div>';
+  // explore grid
+  html += sectionGrid();
+
+  // herbarium preview
+  html += herbariumPreview();
+
+  // atmosphere
+  html += atmosphereCard(now, np, season, hijri);
 
   sec.innerHTML = html;
 
-  // wire buttons
+  // wire navigation buttons
   var gos = sec.querySelectorAll('[data-go]');
   for (var k = 0; k < gos.length; k++) {
     (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[k]);
+  }
+  var gd = sec.querySelectorAll('[data-goto-daily]');
+  for (var q = 0; q < gd.length; q++) {
+    (function (b) { b.addEventListener('click', function () { dailyTab = b.getAttribute('data-goto-daily'); showScreen('daily'); }); })(gd[q]);
   }
   var ly = el('loc-yes'), ln = el('loc-no');
   if (ly) ly.addEventListener('click', requestLocation);
@@ -889,17 +1012,43 @@ function practiceOptions() {
   return html;
 }
 
+var practiceMode = 'listed'; // 'listed' | 'general' — segmented toggle on the Practice screen
+
+function wirePracticeChrome(sec) {
+  var gos = sec.querySelectorAll('[data-go]');
+  for (var k = 0; k < gos.length; k++) {
+    (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[k]);
+  }
+  var modes = sec.querySelectorAll('[data-pmode]');
+  for (var m = 0; m < modes.length; m++) {
+    (function (b) { b.addEventListener('click', function () { practiceMode = b.getAttribute('data-pmode'); renderPractice(); }); })(modes[m]);
+  }
+}
+
 function renderPractice() {
   var sec = el('screen-practice');
   if (!sec) return;
   var list = getDhikr();
-  var html = '<h1 class="page-title">📿 Practice</h1><p class="page-sub">Tap, remember, grow.</p>';
+  var html = '<button class="backlink" data-go="home">← Garden</button>' +
+    '<span class="kicker k-sage">Quiet counting</span>' +
+    '<h1 class="giant">Count your dhikr</h1>' +
+    '<div class="seg"><button class="seg-btn' + (practiceMode === 'listed' ? ' active' : '') +
+    '" data-pmode="listed">Listed remembrance</button>' +
+    '<button class="seg-btn' + (practiceMode === 'general' ? ' active' : '') +
+    '" data-pmode="general">General counter</button></div>';
 
-  if (!list.length) {
-    html += '<div class="card"><div class="empty-note">Practice content is being prepared —<br>check back soon, inshaAllah 🌱</div></div>';
+  if (practiceMode === 'general') {
     html += renderGeneralCounter();
     sec.innerHTML = html;
+    wirePracticeChrome(sec);
     wireGeneral(sec);
+    return;
+  }
+
+  if (!list.length) {
+    html += '<div class="card"><div class="empty-note">Practice content is being prepared —<br>check back soon, inshaAllah.</div></div>';
+    sec.innerHTML = html;
+    wirePracticeChrome(sec);
     return;
   }
 
@@ -915,11 +1064,12 @@ function renderPractice() {
   var dh = dhikrById(PC.dhikrId);
   var locked = dhikrLocked(dh);
 
-  html += '<div class="card"><label class="field" for="dhikr-select">Choose a dhikr</label>' +
-    '<select id="dhikr-select">' + practiceOptions() + '</select></div>';
+  html += '<div class="card dd-card"><label class="field" for="dhikr-select">Remembrance</label>' +
+    '<select id="dhikr-select">' + practiceOptions() + '</select>' +
+    '<div class="dd-cap">' + list.length + ' remembrances &middot; choose one to begin</div></div>';
   html += '<div id="practice-body">' + practiceBody(dh, locked) + '</div>';
-  html += renderGeneralCounter();
   sec.innerHTML = html;
+  wirePracticeChrome(sec);
 
   var sel = el('dhikr-select');
   if (sel) {
@@ -933,38 +1083,43 @@ function renderPractice() {
     });
   }
   wireTap();
-  wireGeneral(sec);
 }
 
 function practiceBody(dh, locked) {
-  if (!dh) return '<div class="card"><div class="empty-note">Choose a dhikr above 🌱</div></div>';
+  if (!dh) return '<div class="card"><div class="empty-note">Choose a dhikr above.</div></div>';
   if (locked) {
     var found = dhikrStage(dh);
     var req = found ? (Number(found.stage.sessionsRequired) || 0) : 0;
-    return '<div class="card"><div class="empty-note">🔒 This dhikr unlocks after <b>' + req +
+    return '<div class="card prac-card"><div class="empty-note">This dhikr unlocks after <b>' + req +
       '</b> practice sessions.<br>You have <b>' + S.sessions + '</b> so far — keep going!</div></div>';
   }
-  var html = '<div class="card"><span class="kicker">Now practicing</span>';
+  var nm = nextMilestoneFor(dh);
+  var html = '<div class="card prac-card">';
+  if (nm && nm.flower && nm.flower.rarity) {
+    html += '<span class="rarity-pill">' + esc(nm.flower.rarity) + '</span>';
+  }
   if (dh.arabic) html += arabicBlock(dh.arabic, 'arabic-big');
   if (dh.transliteration) html += '<p class="translit">' + esc(dh.transliteration) + '</p>';
   if (dh.translation) html += '<p class="translation">' + esc(dh.translation) + '</p>';
-  if (dh.virtue) html += '<p class="muted">✨ ' + esc(dh.virtue) + '</p>';
-  html += '<div class="pbar-label" style="margin-top:10px"><span>Sessions completed</span><span><b>' +
-    S.sessions + '</b></span></div></div>';
+  if (nm && nm.flower) {
+    var kindLabel = nm.kind === 'single' ? 'in one sitting' : 'cumulative';
+    html += '<div class="next-line">Next: ' + esc(nm.flower.name) + ' &middot; ' + fmtNum(nm.threshold) + ' ' + esc(kindLabel) + '</div>';
+  }
+  if (dh.virtue) html += '<p class="virtue-line">' + esc(dh.virtue) + '</p>';
 
   var targets = [33, 100, 500, 1000];
   if (dh && Number(dh.target) > 0 && targets.indexOf(Number(dh.target)) === -1) targets.push(Number(dh.target));
   targets.sort(function (a, b) { return a - b; });
-  html += '<div class="card"><label class="field" for="target-select">Target</label>' +
+  html += '<div class="target-row"><label for="target-select">Target</label>' +
     '<select id="target-select">' +
     targets.map(function (t) {
       return '<option value="' + t + '"' + (PC.target === t ? ' selected' : '') + '>' + t + '</option>';
-    }).join('') + '</select>' +
-    '<div class="counter-wrap"><div class="tap-count" id="tap-count">' + PC.count + '</div>' +
-    '<div class="tap-target">of <span id="tap-target">' + PC.target + '</span></div>' +
-    '<button class="tap-btn" id="tap-btn" aria-label="Tap for dhikr">🤲</button>' +
-    '<div class="tap-hint">Tap the button with each recitation</div></div>' +
-    '<div class="pbar green" style="margin-top:14px"><i id="tap-bar" style="width:0%"></i></div>' +
+    }).join('') + '</select></div>';
+
+  html += '<button class="tap-circle" id="tap-btn" aria-label="Tap for dhikr">' +
+    '<span class="tap-num" id="tap-count">' + PC.count + '</span>' +
+    '<span class="tap-of">of <span id="tap-target">' + PC.target + '</span></span></button>' +
+    '<div class="tap-hint">Tap to count</div>' +
     '<div class="btn-row" style="margin-top:12px">' +
     '<button class="btn-green" id="complete-btn">Complete session</button>' +
     '<button class="btn-ghost" id="reset-btn">Reset</button></div></div>';
@@ -1021,7 +1176,7 @@ function completeSession(early) {
 /* ---- general counter (no flower, logged as "General dhikr") ---- */
 function renderGeneralCounter() {
   var presets = getGeneralPresets();
-  var html = '<div class="card" style="border:2px dashed var(--gold-500)"><span class="kicker">General counter</span>' +
+  var html = '<div class="card" style="border:2px dashed var(--gold)"><span class="kicker">General counter</span>' +
     '<h3>🔢 Count anything</h3>' +
     '<p class="muted">For any remembrance not listed above. Saved as “General dhikr” — no flower, just the count.</p>' +
     '<div class="btn-row" style="margin-bottom:10px">';
@@ -1068,6 +1223,9 @@ function saveGeneral(early) {
   if (n <= 0) { toast('Tap a few times first 🌱'); return; }
   S.general.push({ count: n, at: Date.now() });
   S.lifetime += n;
+  var dk = todayKey();
+  S.dayCounts[dk] = (Number(S.dayCounts[dk]) || 0) + n;
+  safeSet('dg_daycounts', S.dayCounts);
   saveState();
   // lifetime secret still applies to general counts
   var secret = getSecret();
@@ -1100,49 +1258,63 @@ function renderDaily() {
   var sec = el('screen-daily');
   if (!sec) return;
   var daily = getDaily();
-  var html = '<h1 class="page-title">☀️ Daily Rhythm</h1>' +
-    '<p class="page-sub">A gentle rhythm for your day — no streaks, no pressure. Just presence. 🌿</p>';
-  html += '<div class="tabs"><button class="tab' + (dailyTab === 'morning' ? ' active' : '') +
-    '" data-tab="morning">🌅 Morning</button>' +
-    '<button class="tab' + (dailyTab === 'evening' ? ' active' : '') + '" data-tab="evening">🌙 Evening</button></div>';
+  var mItems = daily.morning || [], eItems = daily.evening || [];
+  var html = '<button class="backlink" data-go="home">← Home</button>' +
+    '<span class="kicker k-sage">Today&rsquo;s gentle rhythm</span>' +
+    '<h1 class="giant">Morning &amp; evening</h1>' +
+    '<p class="lede">Check each remembrance as you complete it. Open &ldquo;Read transliteration&rdquo; ' +
+    'whenever you need help reading the Arabic; progress is saved for today with no streak penalty.</p>';
 
-  var items = dailyTab === 'morning' ? daily.morning : daily.evening;
+  var items = dailyTab === 'morning' ? mItems : eItems;
   var day = checklistDay();
-  var done = 0;
+  var mDone = 0, eDone = 0, i;
+  for (i = 0; i < mItems.length; i++) { if (day.morning && day.morning[i]) mDone++; }
+  for (i = 0; i < eItems.length; i++) { if (day.evening && day.evening[i]) eDone++; }
+  var done = dailyTab === 'morning' ? mDone : eDone;
 
   if (!items.length) {
-    html += '<div class="card"><div class="empty-note">Daily remembrances are being prepared —<br>check back soon, inshaAllah 🌱</div></div>';
+    html += '<div class="card"><div class="empty-note">Daily remembrances are being prepared —<br>check back soon, inshaAllah.</div></div>';
   } else {
-    html += '<div id="daily-list">';
-    for (var i = 0; i < items.length; i++) {
+    html += '<div class="card checklist-card"><span class="kicker k-sage">Today&rsquo;s checklist</span>' +
+      '<div class="check-head"><h2>' + (dailyTab === 'morning' ? 'Morning' : 'Evening') + '</h2>' +
+      '<span class="check-done-count">' + done + '/' + items.length + '</span></div>' +
+      '<div class="tabs"><button class="tab' + (dailyTab === 'morning' ? ' active' : '') +
+      '" data-tab="morning"><span>Morning</span><b>' + mDone + '/' + mItems.length + '</b></button>' +
+      '<button class="tab' + (dailyTab === 'evening' ? ' active' : '') +
+      '" data-tab="evening"><span>Evening</span><b>' + eDone + '/' + eItems.length + '</b></button></div>' +
+      '<div id="daily-list">';
+    for (i = 0; i < items.length; i++) {
       (function (idx, it) {
         var checked = !!day[dailyTab][idx];
-        if (checked) done++;
         html += '<div class="check-row' + (checked ? ' done' : '') + '" data-idx="' + idx + '">' +
           '<input type="checkbox" class="bigcheck" ' + (checked ? 'checked' : '') +
           ' aria-label="Mark complete: ' + esc(it.transliteration || ('item ' + (idx + 1))) + '">' +
           '<div class="check-body">';
         if (it.arabic) html += arabicBlock(it.arabic, 'arabic-mid');
         if (it.transliteration || it.count) {
-          html += '<button class="translit-toggle" aria-expanded="false">▸ Read transliteration' +
-            (it.count ? ' · ×' + esc(it.count) : '') + '</button>' +
+          html += '<button class="translit-toggle" aria-expanded="false"><span>Read transliteration' +
+            (it.count ? ' &middot; &times;' + esc(it.count) : '') + '</span><span class="tt-plus">+</span></button>' +
             '<div class="translit-body" hidden>' +
             (it.transliteration ? '<p class="translit">' + esc(it.transliteration) + '</p>' : '') +
             (it.count ? '<p class="muted">Repeat <b>' + esc(it.count) + '</b> times</p>' : '') + '</div>';
         } else if (it.count) {
-          html += '<span class="check-count">×' + esc(it.count) + '</span>';
+          html += '<span class="check-count">&times;' + esc(it.count) + '</span>';
         }
         html += '</div></div>';
       })(i, items[i] || {});
     }
-    html += '</div>';
-    html += '<div class="card" style="text-align:center"><span class="kicker">Today</span>' +
-      '<div style="font-size:1.6rem;font-weight:800;color:var(--green-900)">' + done + ' / ' + items.length + ' complete</div>' +
+    html += '</div></div>';
+    html += '<div class="card" style="text-align:center"><span class="kicker k-sage">Today</span>' +
+      '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + done + ' / ' + items.length + ' complete</div>' +
       '<div class="pbar green"><i style="width:' + (items.length ? (done / items.length * 100).toFixed(0) : 0) + '%"></i></div></div>';
   }
 
   sec.innerHTML = html;
 
+  var gos = sec.querySelectorAll('[data-go]');
+  for (var g = 0; g < gos.length; g++) {
+    (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[g]);
+  }
   var tabs = sec.querySelectorAll('[data-tab]');
   for (var t = 0; t < tabs.length; t++) {
     (function (b) { b.addEventListener('click', function () { dailyTab = b.getAttribute('data-tab'); renderDaily(); }); })(tabs[t]);
@@ -1164,8 +1336,8 @@ function renderDaily() {
         var open = body.hidden;
         body.hidden = !open;
         tog.setAttribute('aria-expanded', String(open));
-        tog.innerHTML = (open ? '▾' : '▸') + ' Read transliteration' +
-          (items[idx] && items[idx].count ? ' · ×' + esc(items[idx].count) : '');
+        var plus = tog.querySelector('.tt-plus');
+        if (plus) plus.textContent = open ? '−' : '+';
       });
     })(rows[r]);
   }
@@ -1300,11 +1472,11 @@ function renderHerbarium() {
     '<div class="muted">' + known + ' of ' + pctKeys.length + ' blooms discovered</div>' +
     '<div class="pbar"><i style="width:' + pct + '%"></i></div></div>';
 
-  html += '<h2 style="color:#fff;margin:4px 0 10px">✨ Golden variants</h2>' +
+  html += '<h2 style="color:var(--cream);margin:4px 0 10px">✨ Golden variants</h2>' +
     '<div class="card"><p class="muted">Complete every milestone ladder (100 / 500 / 1,000, cumulative + single sitting) for a dhikr to grow its golden variant.</p>' +
     '<div class="herb-grid">' + goldHtml + '</div></div>';
 
-  html += '<h2 style="color:#fff;margin:4px 0 10px">🌿 Codex</h2>' +
+  html += '<h2 style="color:var(--cream);margin:4px 0 10px">🌿 Codex</h2>' +
     '<div class="herb-grid">' + mainHtml + '</div>';
 
   sec.innerHTML = html;
@@ -1479,32 +1651,19 @@ function wireNav() {
   for (var i = 0; i < navs.length; i++) {
     (function (b) {
       b.addEventListener('click', function () {
-        var s = b.getAttribute('data-screen');
-        if (s === 'more') { openSheet(); return; }
-        showScreen(s);
+        showScreen(b.getAttribute('data-screen'));
       });
     })(navs[i]);
   }
-  var sheets = document.querySelectorAll('#moresheet .sheetbtn[data-screen]');
-  for (var j = 0; j < sheets.length; j++) {
-    (function (b) {
-      b.addEventListener('click', function () { showScreen(b.getAttribute('data-screen')); });
-    })(sheets[j]);
-  }
-  el('sheetclose').addEventListener('click', closeSheet);
-  el('moresheet').addEventListener('click', function (e) {
-    if (e.target === el('moresheet')) closeSheet();
-  });
   el('modal-ok').addEventListener('click', showNextModal);
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      closeSheet();
       if (!el('modal').hidden) showNextModal();
     }
   });
 }
 
-/* If content/data.js arrives late (or is replaced at runtime), pick it up. */
+/* If data.js arrives late (or is replaced at runtime), pick it up. */
 function refreshContent() {
   var fresh = (typeof window.DG_CONTENT === 'object' && window.DG_CONTENT) ? window.DG_CONTENT : {};
   D = fresh;
