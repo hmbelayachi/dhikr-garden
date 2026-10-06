@@ -210,17 +210,14 @@ p { margin: 0 0 10px; line-height: 1.55; }
 .sec-txt b { display: block; font-size: 1.02rem; font-weight: 900; color: var(--cream); line-height: 1.2; }
 .sec-txt i { display: block; font-style: normal; font-size: .8rem; color: var(--sage); font-weight: 700; margin-top: 2px; }
 
-/* ---- herbarium preview tiles ---- */
+/* ---- herbarium preview tiles (compact card look) ---- */
 .herb-prev-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
-.herb-tile {
-  background: var(--card-deep); border: 1px solid var(--border); border-radius: 14px;
-  padding: 12px 4px; text-align: center; min-height: 108px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-}
-.ht-emoji { font-size: 1.9rem; line-height: 1.1; }
-.ht-emoji.dim { opacity: .35; filter: grayscale(1); }
-.ht-name { font-size: .72rem; font-weight: 900; color: var(--cream); line-height: 1.2; }
-.ht-sub { font-size: .62rem; color: var(--sage); font-weight: 700; line-height: 1.25; }
+.herb-prev-grid .herb-cell { padding: 12px 4px; gap: 5px; border-radius: 14px; box-shadow: none; }
+.herb-prev-grid .hbloom { font-size: 1.9rem; }
+.herb-prev-grid .hpill { font-size: .56rem; padding: 3px 8px; }
+.herb-prev-grid .hname { font-size: .66rem; }
+.herb-prev-grid .hname.q { font-size: 1.1rem; }
+.herb-prev-grid .hlabel { font-size: .56rem; }
 
 /* ---- atmosphere ---- */
 .atm-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
@@ -363,17 +360,77 @@ label.field { display: block; font-weight: 800; margin: 2px 0 8px; color: var(--
 .stage-dhikr:first-of-type { border-top: none; }
 
 /* ---- herbarium ---- */
-.herb-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.herb-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 .herb-cell {
-  background: var(--card-deep); border-radius: 14px; padding: 12px 6px; text-align: center;
-  border: 1px solid var(--border);
+  background: var(--card); border: 1px solid var(--border); border-radius: 20px;
+  padding: 18px 10px 14px; text-align: center;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .3);
 }
-.herb-cell .hemoji { font-size: 2rem; }
-.herb-cell .hname { font-size: .72rem; font-weight: 800; line-height: 1.2; margin-top: 4px; color: var(--cream); }
-.herb-cell .hrarity { font-size: .62rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--gold-deep); }
-.herb-cell.unknown { opacity: .75; }
-.herb-cell.unknown .hemoji { filter: grayscale(1); opacity: .4; }
-.herb-cell.golden { border: 2px solid var(--gold); background: linear-gradient(180deg, #241c08, #1a1406); }
+.herb-cell.golden { border: 2px solid var(--gold); }
+.hbloom { font-size: 3rem; line-height: 1; }
+.hbloom.sil { filter: grayscale(1) brightness(.32); opacity: .9; }
+.hpill {
+  font-size: .72rem; font-weight: 800; letter-spacing: .02em; line-height: 1.2;
+  border-radius: 999px; padding: 5px 14px; color: var(--cream); white-space: nowrap;
+}
+.pill-common { background: transparent; border: 1.5px solid var(--sage-dim); color: var(--sage); }
+.pill-uncommon { background: #4d3d22; border: 1.5px solid #6b5636; }
+.pill-rare { background: #3c4a58; border: 1.5px solid #55677a; }
+.pill-golden { background: #6b5a1e; border: 1.5px solid #8a742a; }
+.pill-exotic { background: #1f4a48; border: 1.5px solid #2f6b68; }
+.pill-secret { background: #2a2a35; border: 1.5px solid #4a4a5e; }
+.pill-diamond { background: #3a3f52; border: 1.5px solid #6a7ab8; }
+.herb-cell .hname { font-size: .95rem; font-weight: 900; color: var(--cream); line-height: 1.25; margin: 0; }
+.herb-cell .hname.q { font-size: 1.7rem; color: var(--sage); }
+.herb-cell .hlabel { font-size: .72rem; color: var(--sage); font-weight: 700; }
+/* per-dhikr section */
+.herb-dhikr { margin: 20px 0 4px; padding-top: 18px; border-top: 1px solid var(--border); }
+.herb-dhikr:first-of-type { border-top: none; padding-top: 2px; }
+.hd-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.hd-titles { min-width: 0; }
+.hd-arabic { font-size: 1.65rem; line-height: 1.9; color: var(--cream); text-align: left; }
+.hd-translit { font-style: italic; color: var(--sage); font-size: .95rem; font-weight: 700; margin-top: 2px; }
+.hd-count { color: var(--sage); font-weight: 800; font-size: 1rem; flex: 0 0 auto; padding-top: 8px; }
+.hd-sectitle { font-size: 1.25rem; font-weight: 900; color: var(--cream); }
+/* discovery progress card */
+.herb-progress { display: flex; align-items: center; gap: 14px; }
+.hp-left { flex: 0 0 auto; }
+.hp-pct { font-size: 1.7rem; font-weight: 900; color: var(--cream); line-height: 1; }
+.hp-cap { font-size: .72rem; color: var(--sage); font-weight: 700; margin-top: 2px; }
+.hp-track { position: relative; flex: 1 1 auto; height: 10px; border-radius: 99px; background: rgba(255, 255, 255, .09); }
+.hp-track i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, #c98f2b, var(--gold)); }
+.hp-knob { position: absolute; top: 50%; width: 12px; height: 12px; border-radius: 50%; background: var(--gold); transform: translate(-50%, -50%); box-shadow: 0 0 8px rgba(227, 169, 60, .7); }
+.hp-right { flex: 0 0 auto; font-size: .85rem; color: var(--sage); font-weight: 700; }
+
+/* ---- learn timeline ---- */
+.lp-track { background: rgba(255, 255, 255, .08); border-radius: 16px; height: 54px; margin: 4px 0 8px; overflow: hidden; }
+.lp-fill {
+  height: 100%; min-width: 150px; max-width: 100%; border-radius: 16px;
+  background: linear-gradient(90deg, #d9a13b, #e9b84c);
+  display: flex; align-items: center; padding: 0 18px;
+}
+.lp-fill span { color: #2b2003; font-weight: 900; font-size: .95rem; white-space: nowrap; }
+.learn-timeline { position: relative; margin: 20px 0 10px; }
+.learn-timeline::before {
+  content: ''; position: absolute; left: 23px; top: 28px; bottom: 28px; width: 2px;
+  background: rgba(143, 174, 154, .22); border-radius: 2px;
+}
+.lt-row { position: relative; display: flex; align-items: center; gap: 14px; padding: 15px 0; border-bottom: 1px solid var(--border); }
+.lt-row:last-child { border-bottom: none; }
+.lt-num {
+  width: 46px; height: 46px; border-radius: 50%; flex: 0 0 auto; position: relative; z-index: 1;
+  border: 1.5px solid var(--sage-dim); color: var(--sage); background: #0b100e;
+  display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 1.05rem;
+}
+.lt-row.done .lt-num { background: #8fae9a; border-color: #8fae9a; color: #0b100e; }
+.lt-txt { flex: 1 1 auto; min-width: 0; }
+.lt-desc { display: block; font-size: .85rem; color: var(--sage); font-weight: 700; }
+.lt-name { display: block; font-size: 1.3rem; font-weight: 900; color: var(--cream); line-height: 1.25; letter-spacing: -.01em; }
+.lt-open {
+  flex: 0 0 auto; background: none; border: none; cursor: pointer; touch-action: manipulation;
+  color: #8fae9a; font-family: var(--font-latin); font-weight: 800; font-size: .95rem; padding: 8px 0 8px 8px;
+}
 
 /* ---- articles ---- */
 .article-card { cursor: pointer; touch-action: manipulation; }
@@ -470,3 +527,92 @@ label.field { display: block; font-weight: 800; margin: 2px 0 8px; color: var(--
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+/* ---- switchable themes (body[data-theme]) — garden is the base; these override ---- */
+body[data-theme="highway"] {
+  --bg: #0a0e16;
+  --card: #111a2a;
+  --card-deep: #0c1322;
+  --inset: #0d1424;
+  --gold: #ffb02e;
+  --gold-deep: #f59e0b;
+  --green-pop: #38e1ff;
+}
+body[data-theme="mine"] {
+  --bg: #100c08;
+  --card: #1a130c;
+  --card-deep: #120d08;
+  --inset: #14100a;
+  --gold: #f0a832;
+  --gold-deep: #d98f1f;
+  --green-pop: #ffd97a;
+}
+/* ambience tints stay dark per theme */
+body[data-theme="highway"].amb-dawn   { background: linear-gradient(180deg, #0a1020 0%, #0a0e16 320px, #0a0e16 100%); }
+body[data-theme="highway"].amb-sunset { background: linear-gradient(180deg, #141020 0%, #0a0e16 320px, #0a0e16 100%); }
+body[data-theme="highway"].amb-night  { background: #05070c; }
+body[data-theme="mine"].amb-dawn      { background: linear-gradient(180deg, #141009 0%, #100c08 320px, #100c08 100%); }
+body[data-theme="mine"].amb-sunset    { background: linear-gradient(180deg, #171006 0%, #100c08 320px, #100c08 100%); }
+body[data-theme="mine"].amb-night     { background: #080604; }
+
+/* ---- theme picker card ---- */
+.theme-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.theme-opt {
+  background: var(--card-deep);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 8px 12px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  cursor: pointer;
+  font-family: var(--font-latin);
+  color: var(--cream);
+}
+.theme-opt .theme-emoji { font-size: 2rem; line-height: 1.2; }
+.theme-opt b { font-size: .95rem; font-weight: 900; }
+.theme-opt i { font-style: normal; font-size: .68rem; color: var(--sage); font-weight: 700; text-align: center; line-height: 1.35; }
+.theme-opt.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold), 0 6px 18px rgba(0, 0, 0, .35); }
+
+/* ---- highway hero scene (dark asphalt + neon) ---- */
+.highway-scene {
+  position: relative; height: 190px; border-radius: 16px; overflow: hidden;
+  background: linear-gradient(180deg, #0a0f1c 0%, #0d1526 60%, #080b12 100%);
+  border: 1px solid var(--border); margin-bottom: 12px;
+}
+.hw-glow { position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 120%, rgba(56, 225, 255, .14), transparent 60%); }
+.hw-road {
+  position: absolute; left: 0; right: 0; bottom: 26px; height: 64px;
+  background: #161d2c;
+  border-top: 2px solid rgba(56, 225, 255, .4);
+  border-bottom: 2px solid rgba(56, 225, 255, .15);
+}
+.hw-road i { position: absolute; top: 50%; width: 34px; height: 5px; margin-top: -2.5px; border-radius: 3px; background: rgba(255, 176, 46, .85); }
+.hw-road i:nth-child(1) { left: 6%; } .hw-road i:nth-child(2) { left: 27%; }
+.hw-road i:nth-child(3) { left: 48%; } .hw-road i:nth-child(4) { left: 69%; }
+.hw-road i:nth-child(5) { left: 90%; }
+.hw-car { position: absolute; bottom: 76px; left: 50%; transform: translateX(-50%); font-size: 3rem; filter: drop-shadow(0 6px 12px rgba(0, 0, 0, .6)); }
+.hw-speed i { position: absolute; width: 60px; height: 3px; border-radius: 2px; background: rgba(56, 225, 255, .35); transform: rotate(-18deg); }
+.hw-speed i:nth-child(1) { top: 30%; left: 8%; }
+.hw-speed i:nth-child(2) { top: 45%; left: 4%; width: 44px; }
+.hw-speed i:nth-child(3) { top: 60%; left: 10%; width: 52px; }
+.hw-sign { position: absolute; top: 12px; right: 14px; font-size: 1.6rem; opacity: .9; }
+
+/* ---- mine hero scene (dark cave + amber) ---- */
+.mine-scene {
+  position: relative; height: 190px; border-radius: 16px; overflow: hidden;
+  background: radial-gradient(ellipse at 50% 25%, #241a10 0%, #100c08 70%);
+  border: 1px solid var(--border); margin-bottom: 12px;
+}
+.mn-wall {
+  position: absolute; inset: 0;
+  background:
+    radial-gradient(circle at 12% 20%, rgba(240, 168, 50, .10) 0 40px, transparent 41px),
+    radial-gradient(circle at 88% 35%, rgba(240, 168, 50, .08) 0 55px, transparent 56px),
+    radial-gradient(circle at 70% 10%, rgba(255, 255, 255, .04) 0 30px, transparent 31px);
+}
+.mn-gem { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%); font-size: 3rem; filter: drop-shadow(0 0 18px rgba(240, 168, 50, .85)); }
+.mn-spark i { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: #ffd97a; box-shadow: 0 0 8px #f0a832; }
+.mn-spark i:nth-child(1) { top: 30%; left: 32%; }
+.mn-spark i:nth-child(2) { top: 52%; left: 66%; width: 4px; height: 4px; }
+.mn-spark i:nth-child(3) { top: 62%; left: 40%; width: 5px; height: 5px; }
+.mn-pick { position: absolute; bottom: 34px; left: 18px; font-size: 1.7rem; transform: rotate(-18deg); opacity: .9; }
+.mn-floor { position: absolute; left: 0; right: 0; bottom: 0; height: 26px; background: linear-gradient(180deg, #1c140b, #0d0906); border-top: 1px solid rgba(240, 168, 50, .25); }

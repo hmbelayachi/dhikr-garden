@@ -98,7 +98,9 @@ function getArticles() {
   return a.filter(function (x) { return x && (x.title || x.url); });
 }
 function getSteps() {
-  var s = Array.isArray(D.gettingStarted) ? D.gettingStarted : [];
+  var th = themeDef(currentTheme());
+  var src = (th.gettingStarted && th.gettingStarted.length) ? th.gettingStarted : D.gettingStarted;
+  var s = Array.isArray(src) ? src : [];
   return s.filter(function (x) { return x && x.title; }).slice(0, 4);
 }
 function getSeasons() {
@@ -110,13 +112,20 @@ function getSeasons() {
 function getSecret() {
   var s = (D.milestones && D.milestones.secret && typeof D.milestones.secret === 'object') ? D.milestones.secret
     : ((D.secret && typeof D.secret === 'object') ? D.secret : {});
-  return {
+  var secretOut = {
     name: s.name || 'Diamond Desert Rose',
     threshold: Number(s.threshold) > 0 ? Number(s.threshold) : 1000000,
     emoji: s.emoji || '💎',
     rarity: s.rarity || 'Secret',
     note: s.note || s.description || ''
   };
+  var _scTheme = currentTheme();
+  if (_scTheme !== 'garden') {
+    var _sct = themeDef(_scTheme).secret || {};
+    if (_sct.name) secretOut.name = _sct.name;
+    if (_sct.emoji) secretOut.emoji = _sct.emoji;
+  }
+  return secretOut;
 }
 function getSpecials() {
   var out = {};
@@ -141,6 +150,16 @@ function getSpecials() {
       };
     }
   });
+  var _spTheme = currentTheme();
+  if (_spTheme !== 'garden') {
+    var _spt = themeDef(_spTheme).specials || {};
+    ['10000', '70000'].forEach(function (Tk) {
+      if (_spt[Tk] && out[Tk]) {
+        if (_spt[Tk].name) out[Tk].name = _spt[Tk].name;
+        if (_spt[Tk].emoji) out[Tk].emoji = _spt[Tk].emoji;
+      }
+    });
+  }
   return out;
 }
 function getGeneralPresets() {
@@ -167,8 +186,59 @@ function findTahlil() {
 var MILESTONE_TIERS = [100, 500, 1000];
 var TIER_RARITY = { 100: 'Common', 500: 'Uncommon', 1000: 'Rare' };
 
+/* ---------------- switchable themes ----------------
+   Progress (counts, milestones, discoveries) is theme-agnostic; only the
+   reward names/illustrations/copy re-skin. Rarity tiers never change. */
+function currentTheme() {
+  return (typeof S !== 'undefined' && (S.theme === 'highway' || S.theme === 'mine')) ? S.theme : 'garden';
+}
+function themeDef(id) {
+  try {
+    var t = D.themes && D.themes[id];
+    return (t && typeof t === 'object') ? t : {};
+  } catch (e) { return {}; }
+}
+/* themed copy string, falling back to the garden wording, then to fallback */
+function T(key, fallback) {
+  var th = themeDef(currentTheme());
+  if (th.copy && th.copy[key] !== undefined && th.copy[key] !== null && th.copy[key] !== '') return th.copy[key];
+  var g = themeDef('garden');
+  if (g.copy && g.copy[key] !== undefined && g.copy[key] !== null && g.copy[key] !== '') return g.copy[key];
+  return fallback;
+}
+function applyThemeToDom() {
+  var t = currentTheme();
+  try { document.body.setAttribute('data-theme', t); } catch (e) {}
+  try {
+    var color = themeDef(t).themeColor || '#0b100e';
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', color);
+  } catch (e) {}
+}
+function setTheme(id) {
+  if (typeof S === 'undefined') return;
+  S.theme = (id === 'highway' || id === 'mine') ? id : 'garden';
+  safeSet('dg_theme', S.theme);
+  applyThemeToDom();
+  try { showScreen(currentScreen); } catch (e) {}
+}
 function milestoneFlower(dh, tier, kind) {
   // kind: 'cumulative' | 'single'
+  var theme = currentTheme();
+  if (theme !== 'garden' && dh && dh.id) {
+    var th = themeDef(theme);
+    var rb = (th.rewardBases && th.rewardBases[dh.id]) || {};
+    if (rb.name || rb.emoji) {
+      var words = (th.tierWords && th.tierWords[kind]) || {};
+      var w = words[String(tier)] || '';
+      var tr = (D.milestones && D.milestones.tierRarity) || {};
+      return {
+        name: (w ? w + ' ' : '') + (rb.name || String(dh.transliteration || dh.id)),
+        emoji: rb.emoji || (theme === 'mine' ? '💎' : '🏎️'),
+        rarity: tr[String(tier)] || TIER_RARITY[tier] || 'Common'
+      };
+    }
+  }
   // sources: dh.milestones (contract) OR D.milestones.flowers[dhikrId] (data.js)
   var m = (dh && dh.milestones && dh.milestones[kind]) ? dh.milestones[kind] : {};
   var dmKind = {};
@@ -190,6 +260,12 @@ function milestoneFlower(dh, tier, kind) {
   };
 }
 function baseFlower(dh) {
+  var theme = currentTheme();
+  if (theme !== 'garden' && dh && dh.id) {
+    var th = themeDef(theme);
+    var rb = (th.rewardBases && th.rewardBases[dh.id]) || {};
+    if (rb.name || rb.emoji) return { name: rb.name || 'Reward', emoji: rb.emoji || (theme === 'mine' ? '💎' : '🏎️') };
+  }
   var f = (dh && dh.flower && typeof dh.flower === 'object') ? dh.flower : {};
   return { name: f.name || 'Seedling', emoji: f.emoji || '🌱' };
 }
@@ -208,7 +284,8 @@ var S = {
   milestones: safeGet('dg_milestones', {}),    // {key:true}
   announced: safeGet('dg_announced', []),       // [flowerId...] matured-notified
   lastOpened: safeGet('dg_lastOpened', 0),
-  dayCounts: safeGet('dg_daycounts', {})        // {"YYYY-MM-DD": recitations that day} (for the "today" badge)
+  dayCounts: safeGet('dg_daycounts', {}),       // {"YYYY-MM-DD": recitations that day} (for the "today" badge)
+  theme: safeGet('dg_theme', 'garden')             // active theme: 'garden' | 'highway' | 'mine'
 };
 if (typeof S.sessions !== 'number') S.sessions = 0;
 if (typeof S.lifetime !== 'number') S.lifetime = 0;
@@ -216,6 +293,7 @@ if (!Array.isArray(S.garden)) S.garden = [];
 if (!Array.isArray(S.general)) S.general = [];
 if (!Array.isArray(S.announced)) S.announced = [];
 if (!S.dayCounts || typeof S.dayCounts !== 'object' || Array.isArray(S.dayCounts)) S.dayCounts = {};
+if (S.theme !== 'highway' && S.theme !== 'mine') S.theme = 'garden';   // unknown theme values fall back to garden
 
 function saveState() {
   safeSet('dg_totals', S.totals);
@@ -230,6 +308,7 @@ function saveState() {
   safeSet('dg_milestones', S.milestones);
   safeSet('dg_announced', S.announced.slice(-300));
   safeSet('dg_lastOpened', S.lastOpened);
+  safeSet('dg_theme', S.theme);
 }
 
 /* ---------------- prayer times: Muslim World League solar math ----------------
@@ -416,9 +495,9 @@ function growthStage(f, now) {
 }
 function stageEmoji(f, now) {
   var st = growthStage(f, now);
-  if (st === 0) return '🌱';
-  if (st === 1) return '🌿';
-  return f.emoji || '🌸';
+  if (st === 0) return T('stageSeed', '🌱');
+  if (st === 1) return T('stageSprout', '🌿');
+  return f.emoji || T('defaultEmoji', '🌸');
 }
 function stageLabel(f, now) {
   var st = growthStage(f, now);
@@ -466,7 +545,7 @@ function awardMilestone(key, flower, dhikrId, kind) {
   celebrate({
     emoji: flower.emoji,
     title: flower.name,
-    sub: (flower.rarity ? flower.rarity + ' bloom · ' : '') + 'planted in your garden 🌱'
+    sub: (flower.rarity ? flower.rarity + ' ' + T('awardNoun', 'bloom') + ' · ' : '') + T('awardVerb', 'planted in your garden 🌱')
   });
   return true;
 }
@@ -482,12 +561,9 @@ function checkGoldenLadder(dh) {
   var gkey = 'gold:' + dh.id;
   if (S.milestones[gkey]) return;
   S.milestones[gkey] = true;
-  var bf = baseFlower(dh);
-  var gv = {};
-  try { gv = (D.milestones && D.milestones.goldenVariants && D.milestones.goldenVariants[dh.id]) || {}; }
-  catch (e) { gv = {}; }
-  var name = gv.name || ('Golden ' + bf.name);
-  var gemoji = gv.emoji || bf.emoji || '✨';
+  var gf = goldenFlowerFor(dh);   // theme-aware golden name/emoji
+  var name = gf.name;
+  var gemoji = gf.emoji;
   plantFlower({ dhikrId: dh.id, name: name, emoji: gemoji, kind: 'golden', rarity: 'Golden' });
   discoverFlower('m:' + gkey, name, gemoji, 'Golden');
   saveState();
@@ -638,7 +714,7 @@ function celebrate(opts) {
 function showNextModal() {
   var o = modalQueue.shift();
   if (!o) { el('modal').hidden = true; return; }
-  el('modal-emoji').textContent = o.emoji || '🌸';
+  el('modal-emoji').textContent = o.emoji || T('defaultEmoji', '🌸');
   el('modal-title').textContent = o.title || 'MashaAllah!';
   el('modal-sub').textContent = o.sub || '';
   el('modal').hidden = false;
@@ -739,7 +815,8 @@ function renderNextReward() {
   var nr = nextRewardInfo();
   if (!nr) {
     return '<div class="card"><span class="kicker k-gold">Next reward</span>' +
-      '<h2>Garden complete</h2><p class="muted">Every bloom discovered. May your garden keep growing with every remembrance.</p></div>';
+      '<h2>' + esc(T('rewardDoneTitle', 'Garden complete')) + '</h2><p class="muted">' +
+      esc(T('rewardDoneBody', 'Every bloom discovered. May your garden keep growing with every remembrance.')) + '</p></div>';
   }
   var pct = Math.min(100, Math.max(0, (nr.current / nr.threshold) * 100));
   var dhName = nr.dhikr ? (nr.dhikr.transliteration || nr.dhikr.id) : 'lifetime dhikr';
@@ -756,6 +833,37 @@ function renderNextReward() {
 
 /* Illustrated garden scene for the home hero: night sky, sun, soil mound,
    the gardener's latest bloom at center, dotted ghost-flower outlines. */
+/* ---------------- themed home hero scenes ---------------- */
+function heroScene() {
+  var t = currentTheme();
+  if (t === 'highway') return highwayScene();
+  if (t === 'mine') return mineScene();
+  return gardenScene();
+}
+function latestRewardEmoji(fallback) {
+  for (var g = S.garden.length - 1; g >= 0; g--) {
+    if (S.garden[g] && S.garden[g].emoji) return S.garden[g].emoji;
+  }
+  return fallback;
+}
+function highwayScene() {
+  var car = latestRewardEmoji('🏎️');
+  return '<div class="highway-scene" aria-hidden="true">' +
+    '<div class="hw-glow"></div>' +
+    '<div class="hw-road"><i></i><i></i><i></i><i></i><i></i></div>' +
+    '<div class="hw-car">' + esc(car) + '</div>' +
+    '<div class="hw-speed"><i></i><i></i><i></i></div>' +
+    '<div class="hw-sign">🏁</div></div>';
+}
+function mineScene() {
+  var gem = latestRewardEmoji('💎');
+  return '<div class="mine-scene" aria-hidden="true">' +
+    '<div class="mn-wall"></div>' +
+    '<div class="mn-gem">' + esc(gem) + '</div>' +
+    '<div class="mn-spark"><i></i><i></i><i></i></div>' +
+    '<div class="mn-pick">⛏️</div>' +
+    '<div class="mn-floor"></div></div>';
+}
 function gardenScene() {
   var stars = '';
   var pts = [[6, 12], [18, 30], [32, 8], [47, 22], [60, 10], [74, 28], [88, 14], [12, 48], [94, 44], [40, 40]];
@@ -787,17 +895,31 @@ var SEC_ICONS = {
   progress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>'
 };
 
+/* theme picker card (Home): three worlds, one tap switches and re-renders */
+function themePickerCard() {
+  var ids = ['garden', 'highway', 'mine'];
+  var cur = currentTheme();
+  var html = '<section class="card"><span class="kicker k-sage">' + esc(T('themeKicker', 'Choose your world')) + '</span>' +
+    '<h2 style="margin:0 0 4px">' + esc(T('themeTitle', 'Pick a theme')) + '</h2><div class="theme-grid">';
+  for (var i = 0; i < ids.length; i++) {
+    var th = themeDef(ids[i]);
+    html += '<button class="theme-opt' + (ids[i] === cur ? ' active' : '') + '" data-theme-pick="' + ids[i] + '"' +
+      ' aria-pressed="' + (ids[i] === cur ? 'true' : 'false') + '">' +
+      '<span class="theme-emoji">' + esc(th.emoji || '🌱') + '</span>' +
+      '<b>' + esc(th.name || ids[i]) + '</b><i>' + esc(th.tagline || '') + '</i></button>';
+  }
+  return html + '</div></section>';
+}
 function sectionGrid() {
   var list = getDhikr();
   var practiced = 0, i;
   for (i = 0; i < list.length; i++) { if ((Number(S.totals[list[i].id]) || 0) > 0) practiced++; }
-  var discovered = Object.keys(S.herbarium).length;
-  var totalKeys = herbariumTotals().length;
+  var herbProg = herbariumProgress();
   var items = [
     ['practice', 'Practice', 'Count a dhikr', '#7bc496'],
     ['daily', 'Daily rhythm', 'Morning & evening', '#f0a05a'],
     ['learn', 'Learning path', practiced + '/' + list.length + ' practiced', '#7fb5e8'],
-    ['herbarium', 'Herbarium', discovered + '/' + totalKeys + ' discovered', '#e08ac0'],
+    ['herbarium', T('collection', 'Herbarium'), herbProg.known + '/' + herbProg.total + ' discovered', '#e08ac0'],
     ['articles', 'Articles', getArticles().length + ' pages', '#f0a05a'],
     ['progress', 'Progress', fmtNum(S.lifetime) + ' lifetime', '#7fb5e8']
   ];
@@ -810,26 +932,30 @@ function sectionGrid() {
   return html + '</div>';
 }
 
-/* Herbarium collection preview: featured dhikr's base + cumulative ladder */
+/* Herbarium collection preview: featured dhikr's base + cumulative ladder (card look, compact) */
 function herbariumPreview() {
   var dh = findTahlil() || getDhikr()[0];
   if (!dh) return '';
   var slots = [
-    { key: 'base:' + dh.id, label: 'First bloom', flower: baseFlower(dh) },
-    { key: 'm:c:' + dh.id + ':100', label: '100 cumulative', flower: milestoneFlower(dh, 100, 'cumulative') },
-    { key: 'm:c:' + dh.id + ':500', label: '500 cumulative', flower: milestoneFlower(dh, 500, 'cumulative') },
-    { key: 'm:c:' + dh.id + ':1000', label: '1000 cumulative', flower: milestoneFlower(dh, 1000, 'cumulative') }
+    { key: 'base:' + dh.id, label: 'First bloom', flower: baseFlower(dh), pill: (dh.flower && dh.flower.rarity) || 'Common' },
+    { key: 'm:c:' + dh.id + ':100', label: '100 · cumulative', flower: milestoneFlower(dh, 100, 'cumulative') },
+    { key: 'm:c:' + dh.id + ':500', label: '500 · cumulative', flower: milestoneFlower(dh, 500, 'cumulative') },
+    { key: 'm:c:' + dh.id + ':1000', label: '1,000 · cumulative', flower: milestoneFlower(dh, 1000, 'cumulative') }
   ];
-  var html = '<div class="card"><span class="kicker k-sage">Collection preview</span>' +
-    '<div class="row-between"><h2>Herbarium</h2><button class="link-arrow" data-go="herbarium">Open &rarr;</button></div>' +
+  var html = '<div class="card"><span class="kicker k-sage">' + esc(T('previewKicker', 'Collection preview')) + '</span>' +
+    '<div class="row-between"><h2>' + esc(T('collection', 'Herbarium')) + '</h2><button class="link-arrow" data-go="herbarium">Open &rarr;</button></div>' +
     '<div class="herb-prev-grid">';
   for (var i = 0; i < slots.length; i++) {
-    var known = S.herbarium[slots[i].key];
+    var rec = S.herbarium[slots[i].key];
     var fl = slots[i].flower || {};
-    html += '<div class="herb-tile"><div class="ht-emoji' + (known ? '' : ' dim') + '">' +
-      (known ? esc(known.emoji || fl.emoji || '🌸') : '?') + '</div>' +
-      '<div class="ht-name">' + (known ? esc(known.name || fl.name || '') : '???') + '</div>' +
-      '<div class="ht-sub">' + (known ? esc(dh.transliteration || '') : esc(slots[i].label)) + '</div></div>';
+    var pill = rec ? (rec.rarity || slots[i].pill || fl.rarity || 'Common') : (slots[i].pill || fl.rarity || 'Common');
+    html += herbBloomCard({
+      emoji: fl.emoji || T('defaultEmoji', '🌸'),
+      name: fl.name,
+      pill: pill, pillCls: pillClsFor(pill),
+      label: rec ? (dh.transliteration || '') : slots[i].label,
+      known: !!rec
+    });
   }
   return html + '</div></div>';
 }
@@ -868,8 +994,8 @@ function atmosphereCard(now, np, season, hijri) {
   var prayerName = '';
   if (np && np.prev) prayerName = np.prev.name;
   else if (np && np.cur) prayerName = np.cur.name;
-  var html = '<div class="card"><span class="kicker k-sage">Garden atmosphere</span>' +
-    '<div class="atm-row"><h2>' + esc(season && season.name ? season.name : 'Everyday garden') + '</h2>' +
+  var html = '<div class="card"><span class="kicker k-sage">' + esc(T('atmosphereKicker', 'Garden atmosphere')) + '</span>' +
+    '<div class="atm-row"><h2>' + esc(season && season.name && season.id !== 'default' ? season.name : T('defaultSeason', 'Everyday garden')) + '</h2>' +
     '<div class="atm-time">' + esc(fmtClock(now)) + (prayerName ? '<span>' + esc(prayerName) + '</span>' : '') + '</div></div>' +
     '<p class="muted" style="margin-top:8px">' + (hijri ? esc(hijri) + ' &middot; ' : '') +
     'Lighting follows today&rsquo;s calculated prayer times.</p>';
@@ -890,14 +1016,15 @@ function renderHome() {
   var now = new Date();
   var np = nextPrayer(now);
   var list = getDhikr();
-  var discovered = Object.keys(S.herbarium).length;
-  var totalKeys = herbariumTotals().length;
+  var herbProg = herbariumProgress();
+  var discovered = herbProg.known;
+  var totalKeys = herbProg.total;
   var practiced = 0, i;
   for (i = 0; i < list.length; i++) { if ((Number(S.totals[list[i].id]) || 0) > 0) practiced++; }
   var html = '';
 
   // header: kicker + giant title + gold "today" badge
-  html += '<span class="kicker k-sage">Your quiet patch</span>';
+  html += '<span class="kicker k-sage">' + esc(T('homeKicker', 'Your quiet patch')) + '</span>';
   html += '<div class="home-head"><h1 class="giant">Home</h1>' +
     '<span class="today-badge">' + fmtNum(todayCount()) + '<small>today</small></span></div>';
 
@@ -905,27 +1032,30 @@ function renderHome() {
   if (away.length) {
     var names = away.slice(0, 4).map(function (f) { return esc(f.name); }).join(', ');
     var more = away.length > 4 ? ' +' + (away.length - 4) + ' more' : '';
+    var awayUnit = away.length > 1 ? T('awayPlur', 'flowers bloomed') : T('awaySing', 'flower bloomed');
     html += '<div class="notice"><span class="ntitle">While you were away&hellip;</span>' +
-      esc(String(away.length)) + ' flower' + (away.length > 1 ? 's' : '') +
-      ' bloomed: ' + names + more + '</div>';
+      esc(String(away.length)) + ' ' + esc(awayUnit) + ': ' + names + more + '</div>';
   }
 
   // garden hero
-  html += '<section class="card garden-hero"><span class="kicker k-sage">Your garden</span>' +
-    '<h2 class="hero-title">What you remember, grows.</h2>' + gardenScene() +
-    '<div class="hero-lines"><div><b>' + discovered + '/' + totalKeys + '</b> milestone blooms</div>' +
+  html += '<section class="card garden-hero"><span class="kicker k-sage">' + esc(T('heroKicker', 'Your garden')) + '</span>' +
+    '<h2 class="hero-title">' + esc(T('heroTitle', 'What you remember, grows.')) + '</h2>' + heroScene() +
+    '<div class="hero-lines"><div><b>' + discovered + '/' + totalKeys + '</b> ' + esc(T('milestoneUnit', 'milestone blooms')) + '</div>' +
     '<div><b>' + fmtNum(S.lifetime) + '</b> remembrances tended</div></div>' +
-    '<div class="stat-row"><div class="stat"><b>' + discovered + '</b><span>blooms</span></div>' +
+    '<div class="stat-row"><div class="stat"><b>' + discovered + '</b><span>' + esc(T('statUnit', 'blooms')) + '</span></div>' +
     '<div class="stat"><b>' + fmtNum(S.lifetime) + '</b><span>lifetime</span></div>' +
     '<div class="stat"><b>' + practiced + '</b><span>phrases</span></div></div></section>';
+
+  // theme picker
+  html += themePickerCard();
 
   // next reward
   html += renderNextReward();
 
   // getting started
-  html += '<section class="card"><span class="kicker k-sage">New to the garden?</span>' +
+  html += '<section class="card"><span class="kicker k-sage">' + esc(T('gsKicker', 'New to the garden?')) + '</span>' +
     '<div class="row-between"><div><h2 style="margin:0 0 4px">Getting started</h2>' +
-    '<p class="muted" style="margin:0">Learn how practice grows your garden and unlocks new blooms.</p></div>' +
+    '<p class="muted" style="margin:0">' + esc(T('gsBody', 'Learn how practice grows your garden and unlocks new blooms.')) + '</p></div>' +
     '<button class="link-arrow" data-go="getting-started">Start &rarr;</button></div></section>';
 
   // daily rhythm preview
@@ -950,6 +1080,10 @@ function renderHome() {
   var gd = sec.querySelectorAll('[data-goto-daily]');
   for (var q = 0; q < gd.length; q++) {
     (function (b) { b.addEventListener('click', function () { dailyTab = b.getAttribute('data-goto-daily'); showScreen('daily'); }); })(gd[q]);
+  }
+  var tp = sec.querySelectorAll('[data-theme-pick]');
+  for (var tp_i = 0; tp_i < tp.length; tp_i++) {
+    (function (b) { b.addEventListener('click', function () { setTheme(b.getAttribute('data-theme-pick')); }); })(tp[tp_i]);
   }
   var ly = el('loc-yes'), ln = el('loc-no');
   if (ly) ly.addEventListener('click', requestLocation);
@@ -1155,7 +1289,7 @@ function completeSession(early) {
   var dh = dhikrById(PC.dhikrId);
   if (!dh || dhikrLocked(dh)) return;
   var n = PC.count;
-  if (n <= 0) { toast('Tap a few times first 🌱'); return; }
+  if (n <= 0) { toast('Tap a few times first ' + T('tapEmoji', '🌱')); return; }
   addDhikrCount(dh, n);
   S.sessions++;
   var bf = baseFlower(dh);
@@ -1166,7 +1300,7 @@ function completeSession(early) {
   celebrate({
     emoji: bf.emoji,
     title: early ? 'Session complete!' : 'Target reached — mashaAllah!',
-    sub: fmtNum(n) + ' × ' + (dh.transliteration || dh.id) + ' · a ' + bf.name + ' was planted 🌱'
+    sub: fmtNum(n) + ' × ' + (dh.transliteration || dh.id) + ' · a ' + bf.name + ' ' + T('sessionVerb', 'was planted') + ' ' + T('sessionEmoji', '🌱')
   });
   renderPractice();
 }
@@ -1218,7 +1352,7 @@ function wireGeneral(sec) {
 
 function saveGeneral(early) {
   var n = PC.generalCount;
-  if (n <= 0) { toast('Tap a few times first 🌱'); return; }
+  if (n <= 0) { toast('Tap a few times first ' + T('tapEmoji', '🌱')); return; }
   S.general.push({ count: n, at: Date.now() });
   S.lifetime += n;
   var dk = todayKey();
@@ -1342,49 +1476,125 @@ function renderDaily() {
 }
 
 /* ---------------- LEARN (learning path / unlock stages) ---------------- */
+/* Learn timeline: 10 phrases, flat numbered list, no stages, no locks. */
+var LEARN_ITEMS = [
+  { desc: 'Begin with tahlil', name: 'la ilaha illallah', dhikrId: 'tahlil' },
+  { desc: 'Learn takbir', name: 'Allahu akbar', dhikrId: 'allahu-akbar' },
+  { desc: 'Learn tasbih', name: 'subhanallah', dhikrId: 'subhanallah' },
+  { desc: 'Learn tahmid', name: 'alhamdulillah', dhikrId: 'alhamdulillah' },
+  { desc: 'Plant with praise', name: 'subhanallah wa bihamdihi', dhikrId: 'subhanallahi-wa-bihamdihi' },
+  { desc: 'Ask forgiveness', name: 'Astaghfirullah', dhikrId: 'astaghfirullah' },
+  { desc: 'Include your parents', name: 'Rabi-ghfir li wa liwalidayya',
+    arabic: '\u0631\u064e\u0628\u0650\u0651 \u0627\u063a\u0652\u0641\u0650\u0631\u0652 \u0644\u0650\u064a \u0648\u064e\u0644\u0650\u0648\u064e\u0627\u0644\u0650\u062f\u064e\u064a\u064e\u0651',
+    transliteration: 'Rabi-ghfir li wa liwalidayya',
+    translation: 'My Lord, forgive me and my parents.' },
+  { desc: 'Learn the longer istighfar', name: 'Astaghfirullaha-ladhi la ilaha illa Huwa-l-Hayy-al-Qayyum wa atubu ilayh',
+    arabic: '\u0623\u064e\u0633\u0652\u062a\u064e\u063a\u0652\u0641\u0650\u0631\u064f \u0627\u0644\u0644\u0647\u064e \u0627\u0644\u0630\u0650\u064a \u0644\u0627 \u0625\u0650\u0644\u0647\u064e \u0625\u0650\u0644\u0627 \u0647\u064f\u0648\u064e \u0627\u0644\u0652\u062d\u064e\u064a\u064f\u0651 \u0627\u0644\u0652\u0642\u064e\u064a\u064f\u0651\u0648\u0645\u064f \u0648\u064e\u0623\u064e\u062a\u064f\u0648\u0628\u064f \u0625\u0650\u0644\u064e\u064a\u0652\u0647\u0650',
+    transliteration: 'Astaghfirullaha-ladhi la ilaha illa Huwa-l-Hayy-al-Qayyum wa atubu ilayh',
+    translation: 'I seek the forgiveness of Allah, besides Whom there is no deity, the Ever-Living, the Sustainer of all, and I repent to Him.' },
+  { desc: 'Morning & evening protection', name: 'bismillahil-ladhi la yadurru ma\'a-smihi shay\'un fil-\'ardi wala fis-sama\'i waHuwas-Sami\'ul-\'Alim', dailyId: 'bismillahil-ladhi' },
+  { desc: 'Lean on Allah', name: 'L\u0101 \u1e25awla wa l\u0101 quwwata ill\u0101 bill\u0101h', dhikrId: 'la-hawla' }
+];
+var learnDetailIdx = null;
+
+function getStudySections() {
+  var s = Array.isArray(D.studySections) ? D.studySections : [];
+  return s.filter(function (x) { return x && (x.title || x.body); });
+}
+
+/* resolve display content for a learn item: practice dhikr, daily item, or inline */
+function learnItemContent(item) {
+  if (item.dhikrId) { var dh = dhikrById(item.dhikrId); if (dh) return dh; }
+  if (item.dailyId) {
+    var daily = getDaily();
+    var all = (daily.morning || []).concat(daily.evening || []);
+    for (var i = 0; i < all.length; i++) if (all[i] && all[i].id === item.dailyId) return all[i];
+  }
+  return item;
+}
+
+function learnItemPracticed(item) {
+  if (!item.dhikrId) return false;
+  return (Number(S.totals[item.dhikrId]) || 0) > 0;
+}
+
+function renderLearnTimeline() {
+  var i, practiced = 0;
+  for (i = 0; i < LEARN_ITEMS.length; i++) if (learnItemPracticed(LEARN_ITEMS[i])) practiced++;
+  var pct = Math.round((practiced / LEARN_ITEMS.length) * 100);
+  var html = '<button class="backlink" data-go="home">\u2190 ' + esc(T('homeName', 'Garden')) + '</button>' +
+    '<span class="kicker k-sage">A path, not a race</span>' +
+    '<div class="giant">Learn one phrase at a time.</div>' +
+    '<p class="lede">The four most beloved words are tahlil, takbir, tasbih, and tahmid. Begin there, then continue into daily remembrance.</p>';
+  html += '<div class="lp-track"><div class="lp-fill" style="width:' + pct + '%"><span>' +
+    practiced + ' of ' + LEARN_ITEMS.length + ' practiced</span></div></div>';
+  html += '<div class="learn-timeline">';
+  for (i = 0; i < LEARN_ITEMS.length; i++) {
+    (function (it, idx) {
+      var done = learnItemPracticed(it);
+      html += '<div class="lt-row' + (done ? ' done' : '') + '">' +
+        '<div class="lt-num">' + (done ? '\u2713' : (idx + 1)) + '</div>' +
+        '<div class="lt-txt"><span class="lt-desc">' + esc(it.desc) + '</span>' +
+        '<span class="lt-name">' + esc(it.name) + '</span></div>' +
+        '<button class="lt-open" data-learn-open="' + idx + '">' + (done ? 'Bloomed' : 'Open') + '</button></div>';
+    })(LEARN_ITEMS[i], i);
+  }
+  html += '</div>';
+  html += '<span class="kicker k-sage">Practice notes</span>' +
+    '<div class="giant-sm">Remembering, with care</div>';
+  var notes = getStudySections();
+  for (i = 0; i < notes.length; i++) {
+    html += '<div class="card"><h3>' + esc(notes[i].title || '') + '</h3>' +
+      '<p class="muted" style="margin:0">' + esc(notes[i].body || '') + '</p></div>';
+  }
+  return html;
+}
+
+function renderLearnDetail(it) {
+  var c = learnItemContent(it);
+  var html = '<button class="backlink" data-learn-back="1">\u2190 Learn</button>' +
+    '<span class="kicker k-sage">' + esc(it.desc || 'Learn') + '</span>';
+  if (c.arabic) html += '<div class="arabic arabic-big" dir="rtl">' + esc(c.arabic) + '</div>';
+  html += '<p class="translit" style="text-align:center">' + esc(c.transliteration || it.name) + '</p>';
+  if (c.translation) html += '<p class="translation" style="text-align:center">' + esc(c.translation) + '</p>';
+  if (c.virtue) html += '<div class="card"><p class="muted" style="margin:0">' + esc(c.virtue) + '</p></div>';
+  if (c.note) html += '<p class="muted" style="text-align:center">' + esc(c.note) + '</p>';
+  if (c.target) html += '<p class="muted" style="text-align:center">Suggested count: <b>' + esc(String(c.target)) + '</b></p>';
+  if (it.dhikrId && dhikrById(it.dhikrId)) {
+    html += '<button class="btn-gold" data-learn-practice="' + esc(it.dhikrId) + '">Practice this dhikr \u2192</button>';
+  }
+  return html;
+}
+
 function renderLearn() {
   var sec = el('screen-learn');
   if (!sec) return;
-  var stages = getStages();
-  var html = '<h1 class="page-title">📖 Learning Path</h1>' +
-    '<p class="page-sub">Unlock new remembrances as your practice grows.</p>';
-
-  if (!stages.length) {
-    // fallback: list all dhikr unlocked
-    var list = getDhikr();
-    if (!list.length) {
-      html += '<div class="card"><div class="empty-note">Learning content is being prepared 🌱</div></div>';
-    } else {
-      html += '<div class="card"><span class="kicker">All remembrances</span>';
-      for (var j = 0; j < list.length; j++) html += learnDhikrRow(list[j]);
-      html += '</div>';
-    }
-  } else {
-    for (var s = 0; s < stages.length; s++) {
-      (function (st, si) {
-        var unlocked = stageUnlocked(st);
-        var req = Number(st.sessionsRequired) || 0;
-        var meta = stageMeta(st);
-        html += '<div class="card stage' + (unlocked ? '' : ' locked') + '"><span class="kicker">Stage ' +
-          (si + 1) + ' of ' + stages.length + '</span><h2>' + (unlocked ? '🌿 ' : '🔒 ') + esc(meta.title) + '</h2>';
-        if (meta.description) html += '<p class="muted">' + esc(meta.description) + '</p>';
-        if (unlocked) {
-          html += '<p class="muted">' + S.sessions + ' sessions completed — unlocked.</p>';
-        } else {
-          html += '<p><span class="lock-tag">🔒 Complete ' + req + ' practice sessions to unlock (' + S.sessions + '/' + req + ')</span></p>';
-        }
-        var ids = stageDhikrIds(st);
-        var anyDh = false;
-        for (var i = 0; i < ids.length; i++) {
-          var dh = dhikrById(ids[i]);
-          if (dh) { html += learnDhikrRow(dh); anyDh = true; }
-        }
-        if (!anyDh) html += '<p class="muted">Remembrances for this stage are being prepared.</p>';
-        html += '</div>';
-      })(stages[s], s);
-    }
-  }
+  var html = (learnDetailIdx !== null && LEARN_ITEMS[learnDetailIdx])
+    ? renderLearnDetail(LEARN_ITEMS[learnDetailIdx])
+    : renderLearnTimeline();
   sec.innerHTML = html;
+  var gos = sec.querySelectorAll('[data-go]');
+  for (var k = 0; k < gos.length; k++) {
+    (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[k]);
+  }
+  var opens = sec.querySelectorAll('[data-learn-open]');
+  for (var q = 0; q < opens.length; q++) {
+    (function (b) { b.addEventListener('click', function () { learnDetailIdx = Number(b.getAttribute('data-learn-open')); renderLearn(); }); })(opens[q]);
+  }
+  var backs = sec.querySelectorAll('[data-learn-back]');
+  for (var r = 0; r < backs.length; r++) {
+    (function (b) { b.addEventListener('click', function () { learnDetailIdx = null; renderLearn(); }); })(backs[r]);
+  }
+  var pracs = sec.querySelectorAll('[data-learn-practice]');
+  for (var p = 0; p < pracs.length; p++) {
+    (function (b) { b.addEventListener('click', function () {
+      var id = b.getAttribute('data-learn-practice');
+      PC.dhikrId = id; PC.count = 0;
+      var ndh = dhikrById(id);
+      if (ndh && Number(ndh.target) > 0) PC.target = Number(ndh.target);
+      showScreen('practice');
+    }); })(pracs[p]);
+  }
 }
 
 function learnDhikrRow(dh) {
@@ -1416,68 +1626,153 @@ function herbariumTotals() {
   return keys;
 }
 
-function herbariumCell(key, label, emoji, rarity, known, golden) {
-  return '<div class="herb-cell' + (known ? '' : ' unknown') + (golden ? ' golden' : '') + '">' +
-    '<div class="hemoji">' + (known ? esc(emoji) : '❔') + '</div>' +
-    '<div class="hname">' + (known ? esc(label) : '???') + '</div>' +
-    (known && rarity ? '<div class="hrarity">' + esc(rarity) + '</div>' : '') + '</div>';
+/* rarity → pill style class */
+function pillClsFor(rarity) {
+  var r = String(rarity || '').toLowerCase();
+  if (r.indexOf('diamond') !== -1) return 'pill-diamond';
+  if (r.indexOf('uncommon') !== -1) return 'pill-uncommon';
+  if (r.indexOf('rare') !== -1) return 'pill-rare';
+  if (r.indexOf('gold') !== -1) return 'pill-golden';
+  if (r.indexOf('exotic') !== -1) return 'pill-exotic';
+  if (r.indexOf('secret') !== -1) return 'pill-secret';
+  return 'pill-common';
+}
+
+/* deterministic golden variant for a dhikr (no state change) */
+function goldenFlowerFor(dh) {
+  var theme = currentTheme();
+  if (theme !== 'garden' && dh && dh.id) {
+    var th = themeDef(theme);
+    var rb = (th.rewardBases && th.rewardBases[dh.id]) || {};
+    if (rb.name || rb.emoji) {
+      return {
+        name: (th.goldenPrefix || 'Golden') + ' ' + (rb.name || 'Reward'),
+        emoji: rb.emoji || (theme === 'mine' ? '💎' : '🏎️'),
+        rarity: 'Golden'
+      };
+    }
+  }
+  var bf = baseFlower(dh);
+  var gv = {};
+  try { gv = (D.milestones && D.milestones.goldenVariants && D.milestones.goldenVariants[dh.id]) || {}; } catch (e) { gv = {}; }
+  return { name: gv.name || ('Golden ' + bf.name), emoji: gv.emoji || bf.emoji || '\u2728', rarity: 'Golden' };
+}
+
+/* one bloom card — shared by the herbarium screen and the home preview.
+   o: {emoji, name, pill, pillCls, label, golden, known, alwaysShow} */
+function herbBloomCard(o) {
+  var revealed = o.known || o.alwaysShow;
+  return '<div class="herb-cell' + (o.golden ? ' golden' : '') + '">' +
+    '<div class="hbloom' + (revealed ? '' : ' sil') + '">' + esc(o.emoji || '\uD83C\uDF38') + '</div>' +
+    '<div class="hpill ' + (o.pillCls || 'pill-common') + '">' + esc(o.pill || '') + '</div>' +
+    '<div class="hname' + ((o.known && o.name) ? '' : ' q') + '">' + ((o.known && o.name) ? esc(o.name) : '?') + '</div>' +
+    '<div class="hlabel">' + esc(o.label || '') + '</div></div>';
+}
+
+/* bloom slots for one dhikr: 3 cumulative + 3 one-sitting + golden ladder (+ 2 specials for tahlil) */
+function herbariumSlotsFor(dh, tahlil) {
+  var slots = [], t, tier;
+  for (t = 0; t < MILESTONE_TIERS.length; t++) {
+    tier = MILESTONE_TIERS[t];
+    var fc = milestoneFlower(dh, tier, 'cumulative');
+    slots.push({ key: 'm:c:' + dh.id + ':' + tier, emoji: fc.emoji, name: fc.name, pill: fc.rarity, label: fmtNum(tier) + ' \u00B7 cumulative' });
+    var fs = milestoneFlower(dh, tier, 'single');
+    slots.push({ key: 'm:s:' + dh.id + ':' + tier, emoji: fs.emoji, name: fs.name, pill: fs.rarity, label: fmtNum(tier) + ' \u00B7 one sitting' });
+  }
+  var gf = goldenFlowerFor(dh);
+  slots.push({ key: 'm:gold:' + dh.id, emoji: gf.emoji, name: gf.name, pill: 'Golden',
+    label: 'Complete the 100 / 500 / 1,000 ladder', golden: true, alwaysShow: true });
+  if (tahlil && dh.id === tahlil.id) {
+    var specials = getSpecials();
+    var sp10 = specials['10000'] || {}, sp70 = specials['70000'] || {};
+    slots.push({ key: 'm:sp:' + dh.id + ':10000', emoji: sp10.emoji || '\uD83C\uDF3A', name: sp10.name || 'Special reward', pill: 'Exotic', label: '10,000 \u00B7 cumulative' });
+    slots.push({ key: 'm:sp:' + dh.id + ':70000', emoji: sp70.emoji || '\u2728', name: sp70.name || 'Special reward', pill: '2\u00D7 Exotic', label: '70,000 \u00B7 cumulative' });
+  }
+  return slots;
+}
+
+/* collection progress in the 72-bloom scheme (excludes the hidden secret) */
+function herbariumProgress() {
+  var list = getDhikr(), tahlil = findTahlil();
+  var total = 0, known = 0;
+  for (var i = 0; i < list.length; i++) {
+    var slots = herbariumSlotsFor(list[i], tahlil);
+    for (var s = 0; s < slots.length; s++) {
+      total++;
+      if (S.herbarium[slots[s].key]) known++;
+    }
+  }
+  return { known: known, total: total };
+}
+
+function wireHerbariumNav(sec) {
+  var gos = sec.querySelectorAll('[data-go]');
+  for (var k = 0; k < gos.length; k++) {
+    (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[k]);
+  }
 }
 
 function renderHerbarium() {
   var sec = el('screen-herbarium');
   if (!sec) return;
-  var keys = herbariumTotals();
-  var known = 0;
-  var html = '<h1 class="page-title">🌸 Herbarium</h1>' +
-    '<p class="page-sub">Every bloom you have discovered — and the silhouettes still waiting.</p>';
+  var list = getDhikr();
+  var html = '<button class="backlink" data-go="home">\u2190 ' + esc(T('homeName', 'Garden')) + '</button>' +
+    '<span class="kicker k-sage">Private collection</span>' +
+    '<div class="giant">' + esc(T('collection', 'Herbarium')) + '</div>' +
+    '<p class="lede">' + esc(T('herbariumLede', 'Undiscovered blooms stay in silhouette. Every reveal comes from a clear milestone\u2014never chance, trading, or comparison with anyone else.')) + '</p>';
 
-  if (!getDhikr().length) {
-    html += '<div class="card"><div class="empty-note">The codex is being prepared —<br>check back soon 🌱</div></div>';
+  if (!list.length) {
+    html += '<div class="card"><div class="empty-note">The codex is being prepared \u2014<br>check back soon \uD83C\uDF31</div></div>';
     sec.innerHTML = html;
+    wireHerbariumNav(sec);
     return;
   }
 
-  // golden variants section
-  var goldHtml = '';
-  var list = getDhikr();
-  for (var g = 0; g < list.length; g++) {
+  var tahlil = findTahlil();
+  var prog = herbariumProgress();
+  var pct = prog.total ? Math.round((prog.known / prog.total) * 100) : 0;
+  html += '<div class="card herb-progress">' +
+    '<div class="hp-left"><div class="hp-pct">' + pct + '%</div><div class="hp-cap">discovered</div></div>' +
+    '<div class="hp-track"><i style="width:' + pct + '%"></i><b class="hp-knob" style="left:' + pct + '%"></b></div>' +
+    '<div class="hp-right">' + prog.known + ' of ' + prog.total + '</div></div>';
+
+  for (var i = 0; i < list.length; i++) {
     (function (dh) {
-      var k = 'm:gold:' + dh.id;
-      var rec = S.herbarium[k];
-      var bf = baseFlower(dh);
-      goldHtml += herbariumCell(k, rec ? rec.name : ('Golden ' + bf.name), rec ? rec.emoji : '✨', 'Golden', !!rec, true);
-    })(list[g]);
+      var slots = herbariumSlotsFor(dh, tahlil);
+      var cards = '', secKnown = 0;
+      for (var s = 0; s < slots.length; s++) {
+        var sl = slots[s];
+        var rec = S.herbarium[sl.key];
+        if (rec) secKnown++;
+        cards += herbBloomCard({
+          emoji: sl.emoji, name: sl.name,
+          pill: sl.pill, pillCls: pillClsFor(sl.pill),
+          label: sl.label, golden: !!sl.golden, known: !!rec, alwaysShow: !!sl.alwaysShow
+        });
+      }
+      html += '<div class="herb-dhikr"><div class="hd-head"><div class="hd-titles">' +
+        '<div class="arabic hd-arabic" dir="rtl">' + esc(dh.arabic || '') + '</div>' +
+        '<div class="hd-translit">' + esc(dh.transliteration || '') + '</div></div>' +
+        '<div class="hd-count">' + secKnown + '/' + slots.length + '</div></div>' +
+        '<div class="herb-grid">' + cards + '</div></div>';
+    })(list[i]);
   }
 
-  // main codex
-  var mainHtml = '';
-  for (var i = 0; i < keys.length; i++) {
-    (function (key) {
-      if (key.indexOf('gold:') !== -1) return; // golden lives in its own section
-      var rec = S.herbarium[key];
-      if (rec) known++;
-      var label = rec ? rec.name : key;
-      var emoji = rec ? rec.emoji : '🌸';
-      var rarity = rec ? rec.rarity : '';
-      mainHtml += herbariumCell(key, label, emoji, rarity, !!rec, false);
-    })(keys[i]);
-  }
-
-  var pctKeys = keys.filter(function (k) { return k.indexOf('gold:') === -1; });
-  var pct = pctKeys.length ? Math.round((known / pctKeys.length) * 100) : 0;
-  html += '<div class="card" style="text-align:center"><span class="kicker">Collection</span>' +
-    '<div style="font-size:2rem;font-weight:800;color:var(--green-900)">' + pct + '%</div>' +
-    '<div class="muted">' + known + ' of ' + pctKeys.length + ' blooms discovered</div>' +
-    '<div class="pbar"><i style="width:' + pct + '%"></i></div></div>';
-
-  html += '<h2 style="color:var(--cream);margin:4px 0 10px">✨ Golden variants</h2>' +
-    '<div class="card"><p class="muted">Complete every milestone ladder (100 / 500 / 1,000, cumulative + single sitting) for a dhikr to grow its golden variant.</p>' +
-    '<div class="herb-grid">' + goldHtml + '</div></div>';
-
-  html += '<h2 style="color:var(--cream);margin:4px 0 10px">🌿 Codex</h2>' +
-    '<div class="herb-grid">' + mainHtml + '</div>';
+  /* hidden secret bloom (revealed only at 1,000,000 lifetime) */
+  var secret = getSecret();
+  var srec = S.herbarium['m:secret'];
+  html += '<div class="herb-dhikr"><div class="hd-head"><div class="hd-titles">' +
+    '<div class="hd-sectitle">' + esc(T('secretTitle', 'Secret bloom')) + '</div></div></div>' +
+    '<div class="herb-grid">' + herbBloomCard({
+      emoji: secret.emoji, name: srec ? secret.name : null,
+      pill: srec ? (srec.rarity || 'Secret') : 'Secret',
+      pillCls: srec ? pillClsFor(srec.rarity) : 'pill-secret',
+      label: srec ? (fmtNum(secret.threshold) + ' \u00B7 lifetime') : T('secretHidden', 'A hidden bloom'),
+      golden: true, known: !!srec
+    }) + '</div></div>';
 
   sec.innerHTML = html;
+  wireHerbariumNav(sec);
 }
 
 /* ---------------- ARTICLES ---------------- */
@@ -1552,7 +1847,7 @@ function renderProgress() {
   if (!sec) return;
   var list = getDhikr();
   var html = '<h1 class="page-title">📊 Progress</h1>' +
-    '<p class="page-sub">Your remembrance journey, in numbers and blooms.</p>';
+    '<p class="page-sub">' + esc(T('progressSub', 'Your remembrance journey, in numbers and blooms.')) + '</p>';
 
   html += '<div class="card" style="text-align:center"><span class="kicker">Lifetime remembrances</span>' +
     '<div style="font-size:2.6rem;font-weight:800;color:var(--green-900)">' + fmtNum(S.lifetime) + '</div>' +
@@ -1590,7 +1885,7 @@ function renderProgress() {
             }
           });
         }
-        if (S.milestones['gold:' + dh.id]) chips += '<span class="chip" title="Golden variant">✨</span>';
+        if (S.milestones['gold:' + dh.id]) chips += '<span class="chip" title="' + esc(goldenFlowerFor(dh).name) + '">' + esc(goldenFlowerFor(dh).emoji) + '</span>';
         if (chips) html += '<div class="milestone-chips">' + chips + '</div>';
         html += '</div></div>';
       })(list[i]);
@@ -1610,7 +1905,7 @@ function renderProgress() {
       esc(secret.note) + '</p>';
   } else {
     html += '<div style="font-size:3rem;filter:grayscale(1);opacity:.4">❔</div>' +
-      '<h3>???</h3><p class="muted">A secret bloom hides in this garden… keep remembering.</p>';
+      '<h3>???</h3><p class="muted">' + esc(T('secretTease', 'A secret bloom hides in this garden… keep remembering.')) + '</p>';
   }
   html += '</div>';
 
@@ -1618,20 +1913,22 @@ function renderProgress() {
 }
 
 /* ---------------- GETTING STARTED ---------------- */
-var FALLBACK_STEPS = [
-  { title: 'Pick a remembrance', body: 'Open Practice and choose a dhikr from the list. The first ones are unlocked right away — more open up as you complete sessions.' },
-  { title: 'Tap and remember', body: 'Set a target (33 is a lovely start) and tap the big button with each recitation. There is no timer and no rush.' },
-  { title: 'Grow your garden', body: 'Every finished session plants a flower. Flowers start as seeds 🌱, sprout 🌿, and bloom 🌸 in real time — even while the app is closed.' },
-  { title: 'Keep a gentle rhythm', body: 'Check the Daily Rhythm for morning and evening remembrances, and visit your Herbarium to see every bloom you have discovered.' }
-];
+function fallbackSteps() {
+  return [
+    { title: 'Pick a remembrance', body: 'Open Practice and choose a dhikr from the list. Every remembrance is ready from the start.' },
+    { title: 'Tap and remember', body: 'Set a target (33 is a lovely start) and tap the big button with each recitation. There is no timer and no rush.' },
+    { title: T('fbStep3Title', 'Grow your garden'), body: T('fbStep3Body', 'Every finished session plants a flower. Flowers start as seeds, sprout, and bloom in real time — even while the app is closed.') },
+    { title: 'Keep a gentle rhythm', body: T('fbStep4Body', 'Check the Daily Rhythm for morning and evening remembrances, and visit your Herbarium to see every bloom you have discovered.') }
+  ];
+}
 
 function renderGettingStarted() {
   var sec = el('screen-getting-started');
   if (!sec) return;
   var steps = getSteps();
-  if (!steps.length) steps = FALLBACK_STEPS;
-  var html = '<h1 class="page-title">🌱 Getting Started</h1>' +
-    '<p class="page-sub">Four steps to your first bloom.</p>';
+  if (!steps.length) steps = fallbackSteps();
+  var html = '<h1 class="page-title">' + esc(T('gsEmoji', '🌱')) + ' Getting Started</h1>' +
+    '<p class="page-sub">' + esc(T('gsSub', 'Four steps to your first bloom.')) + '</p>';
   for (var i = 0; i < steps.length && i < 4; i++) {
     html += '<div class="card"><div class="step-row"><span class="step-num">' + (i + 1) + '</span>' +
       '<div><h3>' + esc(steps[i].title) + '</h3><p class="muted" style="margin:0">' +
@@ -1674,6 +1971,7 @@ function boot() {
   try { refreshPrayers(); } catch (e) { /* prayers optional */ }
   try { applyAmbience(); } catch (e) { /* ambience optional */ }
   wireNav();
+  applyThemeToDom();
   showScreen('home');            // renders home incl. "while you were away"
   S.lastOpened = Date.now();     // mark this visit AFTER the away-check
   saveState();

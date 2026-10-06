@@ -173,8 +173,209 @@ function dgMilestoneSet(base, emoji) {
   };
 }
 
+/* ---------------- switchable themes ----------------
+   garden:  the original flower garden (default).
+   highway: car racing — milestone blooms become cars, the Herbarium becomes the Racing Garage.
+   mine:    precious-metal mining — blooms become gems/minerals, the Herbarium becomes the Mineral Vault.
+   Rarity tiers are unchanged; only names, illustrations, and copy re-skin.
+   Progress (counts, earned milestones, discoveries) is theme-agnostic. */
+const DG_THEMES = {
+  garden: {
+    name: "Garden",
+    tagline: "Grow a bloom with every dhikr",
+    emoji: "🌱",
+    collection: "Herbarium",
+    themeColor: "#0b100e",
+    copy: {
+      collection: "Herbarium",
+      homeKicker: "Your quiet patch",
+      homeName: "Garden",
+      heroKicker: "Your garden",
+      heroTitle: "What you remember, grows.",
+      milestoneUnit: "milestone blooms",
+      statUnit: "blooms",
+      gsKicker: "New to the garden?",
+      gsBody: "Learn how practice grows your garden and unlocks new blooms.",
+      previewKicker: "Collection preview",
+      atmosphereKicker: "Garden atmosphere",
+      defaultSeason: "Everyday garden",
+      awaySing: "flower bloomed",
+      awayPlur: "flowers bloomed",
+      rewardDoneTitle: "Garden complete",
+      rewardDoneBody: "Every bloom discovered. May your garden keep growing with every remembrance.",
+      awardNoun: "bloom",
+      awardVerb: "planted in your garden 🌱",
+      sessionVerb: "was planted",
+      sessionEmoji: "🌱",
+      tapEmoji: "🌱",
+      defaultEmoji: "🌸",
+      stageSeed: "🌱",
+      stageSprout: "🌿",
+      herbariumLede: "Undiscovered blooms stay in silhouette. Every reveal comes from a clear milestone—never chance, trading, or comparison with anyone else.",
+      secretTitle: "Secret bloom",
+      secretHidden: "A hidden bloom",
+      progressSub: "Your remembrance journey, in numbers and blooms.",
+      secretTease: "A secret bloom hides in this garden… keep remembering.",
+      themeKicker: "Choose your world",
+      themeTitle: "Pick a theme",
+      gsEmoji: "🌱",
+      gsSub: "Four steps to your first bloom.",
+      fbStep3Title: "Grow your garden",
+      fbStep3Body: "Every finished session plants a flower. Flowers start as seeds 🌱, sprout 🌿, and bloom 🌸 in real time — even while the app is closed.",
+      fbStep4Body: "Check the Daily Rhythm for morning and evening remembrances, and visit your Herbarium to see every bloom you have discovered."
+    }
+  },
+  highway: {
+    name: "Highway",
+    tagline: "Race a mile with every dhikr",
+    emoji: "🏁",
+    collection: "Racing Garage",
+    themeColor: "#0a0e16",
+    rewardBases: {
+      "subhanallah": { name: "City Sedan", emoji: "🚗" },
+      "alhamdulillah": { name: "Family Wagon", emoji: "🚙" },
+      "allahu-akbar": { name: "Work Pickup", emoji: "🛻" },
+      "astaghfirullah": { name: "City Taxi", emoji: "🚕" },
+      "hasbunallah": { name: "Patrol Cruiser", emoji: "🚓" },
+      "tahlil": { name: "Rally Racer", emoji: "🏎️" },
+      "salawat": { name: "Tour Coach", emoji: "🚚" },
+      "subhanallahi-wa-bihamdihi": { name: "Big Hauler", emoji: "🚛" },
+      "subhanallahil-azim": { name: "Sport Bike", emoji: "🏍️" },
+      "la-hawla": { name: "Victory Scooter", emoji: "🛵" }
+    },
+    tierWords: {
+      cumulative: { "100": "Rookie", "500": "Pro", "1000": "Champion" },
+      single: { "100": "Night", "500": "Drift", "1000": "Turbo" }
+    },
+    goldenPrefix: "Golden",
+    specials: {
+      "10000": { name: "Aurora GT Racer", emoji: "🏎️" },
+      "70000": { name: "Twin Turbo Legends", emoji: "🏁" }
+    },
+    secret: { name: "Diamond Grand Prix Trophy", emoji: "🏆" },
+    copy: {
+      collection: "Racing Garage",
+      homeKicker: "Your home stretch",
+      homeName: "Highway",
+      heroKicker: "Your highway",
+      heroTitle: "What you remember, drives you.",
+      milestoneUnit: "milestone cars",
+      statUnit: "cars",
+      gsKicker: "New to the race?",
+      gsBody: "Learn how practice fuels your race and unlocks new cars.",
+      previewKicker: "Collection preview",
+      atmosphereKicker: "Track atmosphere",
+      defaultSeason: "Everyday highway",
+      awaySing: "car got tuned",
+      awayPlur: "cars got tuned",
+      rewardDoneTitle: "Garage complete",
+      rewardDoneBody: "Every car unlocked. May your highway keep stretching with every remembrance.",
+      awardNoun: "car",
+      awardVerb: "rolled into your garage 🏁",
+      sessionVerb: "rolled into your garage",
+      sessionEmoji: "🏁",
+      tapEmoji: "🏁",
+      defaultEmoji: "🏎️",
+      stageSeed: "🏁",
+      stageSprout: "🔧",
+      herbariumLede: "Undiscovered cars stay under covers. Every reveal comes from a clear milestone—never chance, trading, or comparison with anyone else.",
+      secretTitle: "Secret car",
+      secretHidden: "A hidden car",
+      progressSub: "Your remembrance journey, in numbers and cars.",
+      secretTease: "A secret car hides in this garage… keep remembering.",
+      themeKicker: "Choose your world",
+      themeTitle: "Pick a theme",
+      gsEmoji: "🏁",
+      gsSub: "Four steps to your first car.",
+      fbStep3Title: "Grow your garage",
+      fbStep3Body: "Every finished session parks a car. Cars get tuned in real time — even while the app is closed, your garage keeps what you earned.",
+      fbStep4Body: "Check the Daily Rhythm for morning and evening remembrances, and visit your Racing Garage to see every car you have unlocked."
+    },
+    gettingStarted: [
+      { title: "Choose a remembrance", body: "Pick a dhikr from the Practice page and tap to count each repetition." },
+      { title: "Complete counts to park cars", body: "Finishing a dhikr's target count parks its car in your Racing Garage and moves you along the learning path." },
+      { title: "Check Daily Rhythm", body: "Work through the morning and evening remembrances each day to keep your engine warm." },
+      { title: "Discover milestones", body: "Reach 100, 500, and 1,000 repetitions — in total and in a single sitting — to unlock rare cars and grow your Racing Garage collection." }
+    ]
+  },
+  mine: {
+    name: "Mine",
+    tagline: "Unearth treasure with every dhikr",
+    emoji: "⛏️",
+    collection: "Mineral Vault",
+    themeColor: "#100c08",
+    rewardBases: {
+      "subhanallah": { name: "Copper Nugget", emoji: "🟤" },
+      "alhamdulillah": { name: "Coal Seam", emoji: "⚫" },
+      "allahu-akbar": { name: "Ironstone", emoji: "🪨" },
+      "astaghfirullah": { name: "Silver Vein", emoji: "⚪" },
+      "hasbunallah": { name: "Amber Drop", emoji: "🟠" },
+      "tahlil": { name: "Sapphire Heart", emoji: "🔷" },
+      "salawat": { name: "Ruby Ember", emoji: "🔴" },
+      "subhanallahi-wa-bihamdihi": { name: "Jade Stone", emoji: "🟢" },
+      "subhanallahil-azim": { name: "Amethyst Geode", emoji: "🟣" },
+      "la-hawla": { name: "Diamond Core", emoji: "💎" }
+    },
+    tierWords: {
+      cumulative: { "100": "Rough", "500": "Cut", "1000": "Flawless" },
+      single: { "100": "Dusty", "500": "Polished", "1000": "Radiant" }
+    },
+    goldenPrefix: "Golden",
+    specials: {
+      "10000": { name: "Aurora Diamond", emoji: "💠" },
+      "70000": { name: "Twin Crown Jewels", emoji: "👑" }
+    },
+    secret: { name: "The Mother Lode", emoji: "⛏️" },
+    copy: {
+      collection: "Mineral Vault",
+      homeKicker: "Your claim",
+      homeName: "Mine",
+      heroKicker: "Your mine",
+      heroTitle: "What you remember, shines.",
+      milestoneUnit: "milestone gems",
+      statUnit: "gems",
+      gsKicker: "New to the mine?",
+      gsBody: "Learn how practice deepens your mine and unearths new gems.",
+      previewKicker: "Collection preview",
+      atmosphereKicker: "Mine atmosphere",
+      defaultSeason: "Everyday mine",
+      awaySing: "gem was polished",
+      awayPlur: "gems were polished",
+      rewardDoneTitle: "Vault complete",
+      rewardDoneBody: "Every gem unearthed. May your mine keep yielding with every remembrance.",
+      awardNoun: "gem",
+      awardVerb: "added to your vault ⛏️",
+      sessionVerb: "was added to your vault",
+      sessionEmoji: "⛏️",
+      tapEmoji: "⛏️",
+      defaultEmoji: "💎",
+      stageSeed: "⛏️",
+      stageSprout: "🪨",
+      herbariumLede: "Undiscovered gems stay in the rough. Every reveal comes from a clear milestone—never chance, trading, or comparison with anyone else.",
+      secretTitle: "Secret gem",
+      secretHidden: "A hidden gem",
+      progressSub: "Your remembrance journey, in numbers and gems.",
+      secretTease: "A secret gem hides in this vault… keep remembering.",
+      themeKicker: "Choose your world",
+      themeTitle: "Pick a theme",
+      gsEmoji: "⛏️",
+      gsSub: "Four steps to your first gem.",
+      fbStep3Title: "Fill your vault",
+      fbStep3Body: "Every finished session unearths a gem. Gems are polished in real time — even while the app is closed, your vault keeps what you earned.",
+      fbStep4Body: "Check the Daily Rhythm for morning and evening remembrances, and visit your Mineral Vault to see every gem you have unearthed."
+    },
+    gettingStarted: [
+      { title: "Choose a remembrance", body: "Pick a dhikr from the Practice page and tap to count each repetition." },
+      { title: "Complete counts to unearth gems", body: "Finishing a dhikr's target count adds its gem to your Mineral Vault and moves you along the learning path." },
+      { title: "Check Daily Rhythm", body: "Work through the morning and evening remembrances each day to keep your lamp lit." },
+      { title: "Discover milestones", body: "Reach 100, 500, and 1,000 repetitions — in total and in a single sitting — to unearth rare gems and grow your Mineral Vault collection." }
+    ]
+  }
+};
+
 window.DG_CONTENT = {
   meta: { appName: "Dhikr Garden Grower", version: 1 },
+  themes: DG_THEMES,
 
   rarityOrder: ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Exotic", "Mythic", "Diamond"],
 
