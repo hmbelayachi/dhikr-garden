@@ -508,31 +508,24 @@ window.DG_CONTENT = {
       embed: true
     },
     {
-      id: "eid-takbir",
-      title: "The Takbir of Eid",
-      description: "The full Eid takbir with transliteration and an explanation of its meanings.",
-      url: "https://www.aicp.org/index.php/islamic-information/text/english/70-takbirat-of-id",
+      id: "dear-youth-session-1",
+      title: "Dear Youth – Session 1",
+      description: "Written for young readers: the proper belief in God and His prophets, plus the story of Prophet Adam.",
+      url: "https://www.aicp.org/index.php/islamic-information/text/english/31-dear-youth-session-1",
       embed: true
     },
     {
-      id: "how-to-pray-eid-prayer",
-      title: "How to Pray the Eid Prayer",
-      description: "A step-by-step guide to the Eid prayer, including the extra takbirs and the words said between them.",
-      url: "https://aicp.org/index.php/islamic-information/text/english/46-how-to-pray-the-id-prayer",
-      embed: true
+      id: "islam-true-religion",
+      title: "Islam, The True Religion",
+      description: "The full overview: belief in Allah, His messengers, the Day of Judgment, Paradise and Hellfire.",
+      url: "https://www.aicp.org/SupportingDocs/Islam.pdf",
+      embed: false
     },
     {
       id: "ramadan-has-returned",
       title: "Ramadan Has Returned",
       description: "The remembrances taught for Ramadan: a morning and evening protection said three times, what to say at iftar, and a du'a before sleep.",
       url: "https://www.aicp.org/index.php/islamic-information/text/english/59-ramadan-has-returned",
-      embed: true
-    },
-    {
-      id: "awrad-al-tahsin-audio",
-      title: "Morning & Evening Protection Remembrances (Audio)",
-      description: "Audio recitation of the morning and evening remembrances of protection.",
-      url: "https://www.aicp.org/index.php/islamic-information/audio/2015-06-04-14-18-23/558-2015-09-27-15-26-58",
       embed: true
     },
     {

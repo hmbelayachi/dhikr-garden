@@ -1397,6 +1397,12 @@ function renderDaily() {
     '<p class="lede">Check each remembrance as you complete it. Open &ldquo;Read transliteration&rdquo; ' +
     'whenever you need help reading the Arabic; progress is saved for today with no streak penalty.</p>';
 
+  html += '<div class="card" style="text-align:center">' +
+    '<span class="kicker k-sage">🎧 Listen along</span>' +
+    '<h2 style="margin:6px 0 4px">Awrad al-Tahsin</h2>' +
+    '<p class="muted">Play the audio recitation in a new tab, then follow along while you check off the list below.</p>' +
+    '<a class="btn-gold" style="display:block;text-align:center;text-decoration:none" href="https://www.aicp.org/index.php/islamic-information/audio/2015-06-04-14-18-23/558-2015-09-27-15-26-58" target="_blank" rel="noopener">▶ Play audio</a></div>';
+
   var items = dailyTab === 'morning' ? mItems : eItems;
   var day = checklistDay();
   var mDone = 0, eDone = 0, i;
