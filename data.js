@@ -373,9 +373,31 @@ const DG_THEMES = {
   }
 };
 
+/* Re-plant finishes: deterministic variant names per copy number.
+   Copy 2 = accent, Copy 3 = detailed trim, Copy 4+ = collector shine.
+   Copy numbers start at 2 (copy 1 is the original). No randomness. */
+const DG_REPLANT_FINISHES = {
+  garden: {
+    "2": { word: "Accent", desc: "Accent color unlocked" },
+    "3": { word: "Detailed trim", desc: "Detailed trim unlocked" },
+    "4": { word: "Collector shine", desc: "Collector shine unlocked" }
+  },
+  highway: {
+    "2": { word: "Racing stripe", desc: "Racing stripe unlocked" },
+    "3": { word: "Body kit", desc: "Custom body kit unlocked" },
+    "4": { word: "Champion polish", desc: "Champion polish unlocked" }
+  },
+  mine: {
+    "2": { word: "Accent cut", desc: "Accent cut unlocked" },
+    "3": { word: "Master setting", desc: "Master setting unlocked" },
+    "4": { word: "Museum shine", desc: "Museum shine unlocked" }
+  }
+};
+
 window.DG_CONTENT = {
   meta: { appName: "Dhikr Garden Grower", version: 1 },
   themes: DG_THEMES,
+  replantFinishes: DG_REPLANT_FINISHES,
 
   rarityOrder: ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Exotic", "Mythic", "Diamond"],
 

@@ -285,7 +285,9 @@ var S = {
   announced: safeGet('dg_announced', []),       // [flowerId...] matured-notified
   lastOpened: safeGet('dg_lastOpened', 0),
   dayCounts: safeGet('dg_daycounts', {}),       // {"YYYY-MM-DD": recitations that day} (for the "today" badge)
-  theme: safeGet('dg_theme', 'garden')             // active theme: 'garden' | 'highway' | 'mine'
+  theme: safeGet('dg_theme', 'garden'),            // active theme: 'garden' | 'highway' | 'mine'
+  replants: safeGet('dg_replants', {}),           // {awardKey: [copyNumbers]} — re-planted variant copies
+  replantChoice: safeGet('dg_replant_choice', null) // selected awardKey for the General counter re-plant card
 };
 if (typeof S.sessions !== 'number') S.sessions = 0;
 if (typeof S.lifetime !== 'number') S.lifetime = 0;
@@ -294,6 +296,7 @@ if (!Array.isArray(S.general)) S.general = [];
 if (!Array.isArray(S.announced)) S.announced = [];
 if (!S.dayCounts || typeof S.dayCounts !== 'object' || Array.isArray(S.dayCounts)) S.dayCounts = {};
 if (S.theme !== 'highway' && S.theme !== 'mine') S.theme = 'garden';   // unknown theme values fall back to garden
+if (!S.replants || typeof S.replants !== 'object' || Array.isArray(S.replants)) S.replants = {};
 
 function saveState() {
   safeSet('dg_totals', S.totals);
@@ -309,6 +312,8 @@ function saveState() {
   safeSet('dg_announced', S.announced.slice(-300));
   safeSet('dg_lastOpened', S.lastOpened);
   safeSet('dg_theme', S.theme);
+  safeSet('dg_replants', S.replants);
+  safeSet('dg_replant_choice', S.replantChoice);
 }
 
 /* ---------------- prayer times: Muslim World League solar math ----------------
@@ -628,6 +633,134 @@ function addDhikrCount(dh, n) {
   safeSet('dg_daycounts', S.dayCounts);
   saveState();
   checkMilestones(dh, n);
+}
+
+/* ---------------- re-planting ----------------
+   A General counter session of 100+ reps can add another variant copy of an
+   already-unlocked collectible. Finishes are deterministic (no randomness):
+   Copy 2 = accent, Copy 3 = detailed trim, Copy 4+ = collector shine.
+   Golden variants and the secret are one-of-one and can never be replanted.
+   Listed-dhikr totals are never touched — this only grows the collection. */
+function replantFinishFor(copyNum) {
+  var theme = currentTheme();
+  var table = (D.replantFinishes && D.replantFinishes[theme]) || (D.replantFinishes && D.replantFinishes.garden) || {};
+  var f = table[copyNum >= 4 ? '4' : String(copyNum)] || table['2'] || {};
+  return { word: f.word || 'Accent', desc: f.desc || 'Accent color unlocked' };
+}
+function replantBlocked(key) {
+  return !key || /^m:gold:/.test(key) || key === 'm:secret';
+}
+/* unlocked collectibles eligible for replanting (theme-aware names) */
+function replantChoices() {
+  var list = getDhikr(), tahlil = findTahlil(), out = [];
+  function push(key, name, emoji, label) {
+    if (!S.herbarium[key] || replantBlocked(key)) return;   // locked, golden, or secret
+    out.push({ key: key, name: name, emoji: emoji, label: label });
+  }
+  for (var i = 0; i < list.length; i++) {
+    (function (dh) {
+      var bf = baseFlower(dh);
+      push('base:' + dh.id, bf.name, bf.emoji, dh.transliteration || dh.id);
+      var slots = herbariumSlotsFor(dh, tahlil), s;
+      for (s = 0; s < slots.length; s++) {
+        if (slots[s].golden) continue;   // golden ladder slot: one-of-one
+        push(slots[s].key, slots[s].name, slots[s].emoji, dh.transliteration || dh.id);
+      }
+    })(list[i]);
+  }
+  return out;
+}
+/* owned copy numbers for an award key, sorted (original = copy 1, not listed) */
+function replantCopies(key) {
+  var c = (S.replants && S.replants[key]) || [];
+  if (!Array.isArray(c)) return [];
+  return c.filter(function (n) { return Number(n) >= 2; })
+    .map(Number).sort(function (a, b) { return a - b; });
+}
+/* first available copy number from 2 upward — reuses a deleted copy's number,
+   never collides with an existing one */
+function nextCopyNumber(key) {
+  var copies = replantCopies(key), n = 2;
+  while (copies.indexOf(n) !== -1) n++;
+  return n;
+}
+/* theme-aware display info for a variant copy */
+function replantVariantInfo(key, copyNum) {
+  var baseName = null, baseEmoji = null, choices = replantChoices(), i;
+  for (i = 0; i < choices.length; i++) {
+    if (choices[i].key === key) { baseName = choices[i].name; baseEmoji = choices[i].emoji; break; }
+  }
+  if (baseName === null) {
+    var rec = S.herbarium[key] || {};
+    baseName = rec.name || 'Collectible';
+    baseEmoji = rec.emoji || T('defaultEmoji', '🌸');
+  }
+  var fin = replantFinishFor(copyNum);
+  return { name: baseName + ' · ' + fin.word, emoji: baseEmoji, finish: fin, copy: copyNum };
+}
+/* award a variant copy; returns false when ineligible */
+function awardReplant(key) {
+  if (replantBlocked(key) || !S.herbarium[key]) return false;
+  var n = nextCopyNumber(key);
+  var copies = replantCopies(key);
+  copies.push(n);
+  copies.sort(function (a, b) { return a - b; });
+  if (!S.replants || typeof S.replants !== 'object') S.replants = {};
+  S.replants[key] = copies;
+  var v = replantVariantInfo(key, n);
+  var dhikrId = null;
+  var m = /^(?:m:[cs]:|m:sp:|base:)([^:]+)/.exec(key);
+  if (m) dhikrId = m[1];
+  var rec = S.herbarium[key] || {};
+  plantFlower({ dhikrId: dhikrId, name: v.name, emoji: v.emoji, kind: 'replant', rarity: rec.rarity || '' });
+  saveState();
+  celebrate({
+    emoji: v.emoji,
+    title: v.name,
+    sub: 'Copy ' + n + ' · ' + v.finish.desc + ' · added to your collection'
+  });
+  return true;
+}
+/* release (delete) a variant copy so its number can be replanted again */
+function releaseReplant(key, copyNum) {
+  var copies = replantCopies(key);
+  var ix = copies.indexOf(Number(copyNum));
+  if (ix === -1) return false;
+  copies.splice(ix, 1);
+  if (copies.length) S.replants[key] = copies;
+  else delete S.replants[key];
+  saveState();
+  return true;
+}
+/* small chips showing owned copies + finishes, with release buttons */
+function replantChipsFor(key) {
+  var copies = replantCopies(key);
+  if (!copies.length) return '';
+  var html = '<div class="rcopies">';
+  for (var i = 0; i < copies.length; i++) {
+    var v = replantVariantInfo(key, copies[i]);
+    html += '<span class="rcopy">' + esc(v.emoji) + ' Copy ' + copies[i] + ' · ' + esc(v.finish.word) +
+      ' <button class="rcopy-x" data-rkey="' + esc(key) + '" data-rcopy="' + copies[i] +
+      '" aria-label="Release copy ' + copies[i] + '">×</button></span>';
+  }
+  return html + '</div>';
+}
+function wireReplantReleases(sec) {
+  var xs = sec.querySelectorAll('[data-rcopy]');
+  for (var i = 0; i < xs.length; i++) {
+    (function (b) {
+      b.addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        var k = b.getAttribute('data-rkey'), n = Number(b.getAttribute('data-rcopy'));
+        if (window.confirm('Release Copy ' + n + '? You can plant it again later.')) {
+          if (releaseReplant(k, n)) {
+            toast('Copy released — plant it again any time 🌱');
+            showScreen(currentScreen);
+          }
+        }
+      });
+    })(xs[i]);
+  }
 }
 
 /* recitations logged today (drives the gold "N today" badge) */
@@ -954,7 +1087,8 @@ function herbariumPreview() {
       name: fl.name,
       pill: pill, pillCls: pillClsFor(pill),
       label: rec ? (dh.transliteration || '') : slots[i].label,
-      known: !!rec
+      known: !!rec,
+      extra: replantChipsFor(slots[i].key)
     });
   }
   return html + '</div></div>';
@@ -1080,6 +1214,7 @@ function renderHome() {
   var gd = sec.querySelectorAll('[data-goto-daily]');
   for (var q = 0; q < gd.length; q++) {
     (function (b) { b.addEventListener('click', function () { dailyTab = b.getAttribute('data-goto-daily'); showScreen('daily'); }); })(gd[q]);
+  wireReplantReleases(sec);
   }
   var tp = sec.querySelectorAll('[data-theme-pick]');
   for (var tp_i = 0; tp_i < tp.length; tp_i++) {
@@ -1305,12 +1440,48 @@ function completeSession(early) {
   renderPractice();
 }
 
-/* ---- general counter (no flower, logged as "General dhikr") ---- */
+/* ---- general counter (no flower, logged as "General dhikr") ----
+   A 100+ session can also plant another variant copy of an unlocked collectible. */
+function renderReplantCard() {
+  var choices = replantChoices();
+  var html = '<div class="card"><span class="kicker k-sage">Collection choice</span>';
+  if (!choices.length) {
+    html += '<h3 style="margin:0 0 6px">Choose what to collect again</h3>' +
+      '<p class="muted" style="margin:0">Unlock a collectible first — finish any dhikr session or reach a milestone — then you can plant another version of it here.</p></div>';
+    return html;
+  }
+  var sel = S.replantChoice, i, valid = false;
+  for (i = 0; i < choices.length; i++) if (choices[i].key === sel) { valid = true; break; }
+  if (!valid) sel = choices[0].key;
+  var copies = replantCopies(sel);
+  var owned = 1 + copies.length;
+  var next = nextCopyNumber(sel);
+  var v = replantVariantInfo(sel, next);
+  html += '<div class="row-between"><h3 style="margin:0">Choose what to collect again</h3>' +
+    '<span class="owned-badge">' + owned + ' owned</span></div>' +
+    '<label class="field" for="replant-select" style="margin-top:10px">Unlocked collectible</label>' +
+    '<select id="replant-select">';
+  for (i = 0; i < choices.length; i++) {
+    var c = choices[i];
+    html += '<option value="' + esc(c.key) + '"' + (c.key === sel ? ' selected' : '') + '>' +
+      esc(c.name + (c.label ? ' · ' + c.label : '')) + '</option>';
+  }
+  html += '</select>' +
+    '<div class="replant-preview"><div class="rp-emoji">' + esc(v.emoji) + '</div>' +
+    '<div><div class="rp-name">' + esc(v.name) + '</div>' +
+    '<div class="rp-sub">Copy ' + next + ' · ' + esc(v.finish.desc) + '</div></div></div>' +
+    '<p class="muted" style="margin:10px 0 0">100 more repetitions to add this variant.</p></div>';
+  return html;
+}
+
 function renderGeneralCounter() {
   var presets = getGeneralPresets();
-  var html = '<div class="card" style="border:2px dashed var(--gold)"><span class="kicker">General counter</span>' +
+  var html = '<div class="card"><span class="kicker k-sage">Use this for any dhikr</span>' +
+    '<p class="muted" style="margin:0">Save 100 or more repetitions to add a new version of an eligible collectible you have already unlocked. Golden and secret rewards stay one-of-one, and your listed-dhikr totals stay unchanged.</p></div>';
+  html += renderReplantCard();
+  html += '<div class="card" style="border:2px dashed var(--gold)"><span class="kicker">General counter</span>' +
     '<h3>🔢 Count anything</h3>' +
-    '<p class="muted">For any remembrance not listed above. Saved as “General dhikr” — no flower, just the count.</p>' +
+    '<p class="muted">For any remembrance not listed above. Saved as “General dhikr” — counts only, your listed-dhikr totals stay unchanged.</p>' +
     '<div class="btn-row" style="margin-bottom:10px">';
   for (var i = 0; i < presets.length; i++) {
     html += '<button class="btn-ghost gpreset" data-t="' + presets[i] + '">' + presets[i] + '</button>';
@@ -1348,6 +1519,15 @@ function wireGeneral(sec) {
   });
   el('greset').addEventListener('click', function () { PC.generalCount = 0; upd(); });
   el('gcomplete').addEventListener('click', function () { saveGeneral(true); });
+  var rs = el('replant-select');
+  if (rs) {
+    if (S.replantChoice) { try { rs.value = S.replantChoice; } catch (e) {} }
+    rs.addEventListener('change', function () {
+      S.replantChoice = rs.value || null;
+      safeSet('dg_replant_choice', S.replantChoice);
+      renderPractice();
+    });
+  }
 }
 
 function saveGeneral(early) {
@@ -1358,6 +1538,11 @@ function saveGeneral(early) {
   var dk = todayKey();
   S.dayCounts[dk] = (Number(S.dayCounts[dk]) || 0) + n;
   safeSet('dg_daycounts', S.dayCounts);
+  // 100+ reps also plants another variant copy of the chosen unlocked collectible
+  var replanted = false;
+  if (n >= 100 && S.replantChoice) {
+    replanted = awardReplant(S.replantChoice);
+  }
   saveState();
   // lifetime secret still applies to general counts
   var secret = getSecret();
@@ -1367,7 +1552,7 @@ function saveGeneral(early) {
     discoverFlower('m:secret', secret.name, secret.emoji, secret.rarity);
     saveState();
     celebrate({ emoji: secret.emoji, title: secret.name, sub: 'SECRET UNLOCKED · ' + fmtNum(secret.threshold) + ' lifetime remembrances!' });
-  } else {
+  } else if (!replanted) {
     toast('Saved ' + fmtNum(n) + ' as General dhikr 🤲');
   }
   PC.generalCount = 0;
@@ -1665,14 +1850,15 @@ function goldenFlowerFor(dh) {
 }
 
 /* one bloom card — shared by the herbarium screen and the home preview.
-   o: {emoji, name, pill, pillCls, label, golden, known, alwaysShow} */
+   o: {emoji, name, pill, pillCls, label, golden, known, alwaysShow, extra} */
 function herbBloomCard(o) {
   var revealed = o.known || o.alwaysShow;
   return '<div class="herb-cell' + (o.golden ? ' golden' : '') + '">' +
     '<div class="hbloom' + (revealed ? '' : ' sil') + '">' + esc(o.emoji || '\uD83C\uDF38') + '</div>' +
     '<div class="hpill ' + (o.pillCls || 'pill-common') + '">' + esc(o.pill || '') + '</div>' +
     '<div class="hname' + ((o.known && o.name) ? '' : ' q') + '">' + ((o.known && o.name) ? esc(o.name) : '?') + '</div>' +
-    '<div class="hlabel">' + esc(o.label || '') + '</div></div>';
+    '<div class="hlabel">' + esc(o.label || '') + '</div>' +
+    (o.extra || '') + '</div>';
 }
 
 /* bloom slots for one dhikr: 3 cumulative + 3 one-sitting + golden ladder (+ 2 specials for tahlil) */
@@ -1753,7 +1939,8 @@ function renderHerbarium() {
         cards += herbBloomCard({
           emoji: sl.emoji, name: sl.name,
           pill: sl.pill, pillCls: pillClsFor(sl.pill),
-          label: sl.label, golden: !!sl.golden, known: !!rec, alwaysShow: !!sl.alwaysShow
+          label: sl.label, golden: !!sl.golden, known: !!rec, alwaysShow: !!sl.alwaysShow,
+          extra: replantChipsFor(sl.key)
         });
       }
       html += '<div class="herb-dhikr"><div class="hd-head"><div class="hd-titles">' +
@@ -1779,6 +1966,7 @@ function renderHerbarium() {
 
   sec.innerHTML = html;
   wireHerbariumNav(sec);
+  wireReplantReleases(sec);
 }
 
 /* ---------------- ARTICLES ---------------- */

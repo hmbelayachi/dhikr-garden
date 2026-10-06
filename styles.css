@@ -616,3 +616,29 @@ body[data-theme="mine"].amb-night     { background: #080604; }
 .mn-spark i:nth-child(3) { top: 62%; left: 40%; width: 5px; height: 5px; }
 .mn-pick { position: absolute; bottom: 34px; left: 18px; font-size: 1.7rem; transform: rotate(-18deg); opacity: .9; }
 .mn-floor { position: absolute; left: 0; right: 0; bottom: 0; height: 26px; background: linear-gradient(180deg, #1c140b, #0d0906); border-top: 1px solid rgba(240, 168, 50, .25); }
+
+/* ---- re-planting ---- */
+.replant-preview {
+  display: flex; gap: 12px; align-items: center;
+  background: var(--inset); border-radius: 14px; padding: 12px; margin-top: 12px;
+}
+.rp-emoji { font-size: 2.2rem; line-height: 1; flex: 0 0 auto; }
+.rp-name { font-weight: 900; color: var(--cream); font-size: 1.05rem; }
+.rp-sub { color: var(--sage); font-size: .85rem; font-weight: 700; margin-top: 2px; }
+.owned-badge {
+  background: #101d16; border: 1px solid var(--border); color: var(--cream);
+  font-weight: 800; font-size: .8rem; padding: 6px 14px; border-radius: 99px; white-space: nowrap;
+}
+.rcopies { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; justify-content: center; }
+.rcopy {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: .68rem; font-weight: 800; color: var(--cream);
+  background: var(--inset); border: 1px solid var(--border);
+  border-radius: 99px; padding: 4px 6px 4px 10px;
+}
+.rcopy-x {
+  border: none; background: rgba(255,255,255,.08); color: var(--sage);
+  border-radius: 50%; width: 22px; height: 22px; min-height: 0;
+  font-size: .95rem; line-height: 1; cursor: pointer; padding: 0;
+  font-family: var(--font-latin); touch-action: manipulation;
+}
