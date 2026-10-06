@@ -522,10 +522,24 @@ window.DG_CONTENT = {
       embed: false
     },
     {
-      id: "ramadan-has-returned",
-      title: "Ramadan Has Returned",
-      description: "The remembrances taught for Ramadan: a morning and evening protection said three times, what to say at iftar, and a du'a before sleep.",
-      url: "https://www.aicp.org/index.php/islamic-information/text/english/59-ramadan-has-returned",
+      id: "essentials-of-belief",
+      title: "The Essentials of Belief",
+      description: "The Two Professions, Allah's oneness and attributes, and belief in all the prophets with following Prophet Muhammad.",
+      url: "https://www.aicp.org/index.php/islamic-information/text/english/78-the-essentials-of-belief",
+      embed: true
+    },
+    {
+      id: "creed-of-at-tahawiyy",
+      title: "The Creed of at-Tahawiyy",
+      description: "The classical Sunni creed: belief in Allah and that Muhammad is His servant, Messenger, and the Seal of the Prophets.",
+      url: "https://www.aicp.org/index.php/islamic-information/text/english/77-the-creed-of-at-tahawiyy",
+      embed: true
+    },
+    {
+      id: "supplement-al-aqidah-al-murshidah",
+      title: "The Supplement to Al-^Aqidah Al-Murshidah",
+      description: "On the Messenger: his lineage, his rank as the best of creation, and what belief in him entails.",
+      url: "https://aicp.org/index.php/islamic-information/text/english/100-the-supplement-to-al-aqidah-al-murshidah",
       embed: true
     },
     {
