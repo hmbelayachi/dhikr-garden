@@ -270,6 +270,29 @@ function baseFlower(dh) {
   return { name: f.name || 'Seedling', emoji: f.emoji || '🌱' };
 }
 
+/* ---------------- SPROUT mini-game constants (defined before state: state validation uses them) ---------------- */
+var SPROUT_COST = 5; // adhkar credits per climb attempt
+var SPROUT_COSTUMES = [
+  { id: 'sproutling', name: 'Sproutling', emoji: '🌱', at: 0 },
+  { id: 'bloom-rider', name: 'Bloom Rider', emoji: '🌸', at: 250 },
+  { id: 'trailblazer', name: 'Trailblazer', emoji: '🌿', at: 750 },
+  { id: 'golden-champion', name: 'Golden Champion', emoji: '🏆', at: 1500 }
+];
+function sproutCostumeById(id) {
+  for (var i = 0; i < SPROUT_COSTUMES.length; i++) if (SPROUT_COSTUMES[i].id === id) return SPROUT_COSTUMES[i];
+  return SPROUT_COSTUMES[0];
+}
+/* Deterministic PRNG (mulberry32) — platform layouts vary per attempt but never by luck. */
+function sproutRng(seed) {
+  var a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /* ---------------- state (all under dg_ keys, all safe) ---------------- */
 var S = {
   totals: safeGet('dg_totals', {}),            // {dhikrId: cumulative count}
@@ -287,7 +310,13 @@ var S = {
   dayCounts: safeGet('dg_daycounts', {}),       // {"YYYY-MM-DD": recitations that day} (for the "today" badge)
   theme: safeGet('dg_theme', 'garden'),            // active theme: 'garden' | 'highway' | 'mine'
   replants: safeGet('dg_replants', {}),           // {awardKey: [copyNumbers]} — re-planted variant copies
-  replantChoice: safeGet('dg_replant_choice', null) // selected awardKey for the General counter re-plant card
+  replantChoice: safeGet('dg_replant_choice', null), // selected awardKey for the General counter re-plant card
+  credits: (function () { var c = safeGet('dg_credits', 0); return (typeof c === 'number' && c >= 0) ? Math.floor(c) : 0; })(),
+  creditAwards: safeGet('dg_credit_awards', {}),     // {"YYYY-MM-DD": {"morning": {idx:credits}, "evening": {idx:credits}}}
+  sproutHigh: (function () { var h = safeGet('dg_sprout_high', 0); return (typeof h === 'number' && h >= 0) ? Math.floor(h) : 0; })(),
+  sproutCostumes: safeGet('dg_sprout_costumes', ['sproutling']), // unlocked costume ids
+  sproutEquipped: safeGet('dg_sprout_equipped', 'sproutling'),
+  sproutAttempts: (function () { var a = safeGet('dg_sprout_attempts', 0); return (typeof a === 'number' && a >= 0) ? Math.floor(a) : 0; })()
 };
 if (typeof S.sessions !== 'number') S.sessions = 0;
 if (typeof S.lifetime !== 'number') S.lifetime = 0;
@@ -297,6 +326,9 @@ if (!Array.isArray(S.announced)) S.announced = [];
 if (!S.dayCounts || typeof S.dayCounts !== 'object' || Array.isArray(S.dayCounts)) S.dayCounts = {};
 if (S.theme !== 'highway' && S.theme !== 'mine') S.theme = 'garden';   // unknown theme values fall back to garden
 if (!S.replants || typeof S.replants !== 'object' || Array.isArray(S.replants)) S.replants = {};
+if (!S.creditAwards || typeof S.creditAwards !== 'object' || Array.isArray(S.creditAwards)) S.creditAwards = {};
+if (!Array.isArray(S.sproutCostumes) || !S.sproutCostumes.length) S.sproutCostumes = ['sproutling'];
+if (SPROUT_COSTUMES.map(function (c) { return c.id; }).indexOf(S.sproutEquipped) === -1) S.sproutEquipped = 'sproutling';
 
 function saveState() {
   safeSet('dg_totals', S.totals);
@@ -314,6 +346,12 @@ function saveState() {
   safeSet('dg_theme', S.theme);
   safeSet('dg_replants', S.replants);
   safeSet('dg_replant_choice', S.replantChoice);
+  safeSet('dg_credits', S.credits);
+  safeSet('dg_credit_awards', S.creditAwards);
+  safeSet('dg_sprout_high', S.sproutHigh);
+  safeSet('dg_sprout_costumes', S.sproutCostumes);
+  safeSet('dg_sprout_equipped', S.sproutEquipped);
+  safeSet('dg_sprout_attempts', S.sproutAttempts);
 }
 
 /* ---------------- prayer times: Muslim World League solar math ----------------
@@ -814,11 +852,12 @@ function dhikrLocked(dh) {
 }
 
 /* ---------------- UI primitives ---------------- */
-var SCREENS = ['home', 'practice', 'daily', 'learn', 'herbarium', 'articles', 'reader', 'progress', 'getting-started'];
+var SCREENS = ['home', 'practice', 'daily', 'learn', 'herbarium', 'articles', 'reader', 'progress', 'game', 'getting-started'];
 var currentScreen = 'home';
 
 function showScreen(name) {
   if (SCREENS.indexOf(name) === -1) name = 'home';
+  try { stopSprout(); } catch (e) { /* game loop never blocks navigation */ }
   currentScreen = name;
   for (var i = 0; i < SCREENS.length; i++) {
     var sec = el('screen-' + SCREENS[i]);
@@ -832,7 +871,7 @@ function showScreen(name) {
   try {
     var fn = { home: renderHome, practice: renderPractice, daily: renderDaily,
                learn: renderLearn, herbarium: renderHerbarium, articles: renderArticles,
-               reader: function () {}, progress: renderProgress, 'getting-started': renderGettingStarted }[name];
+               reader: function () {}, progress: renderProgress, game: renderGame, 'getting-started': renderGettingStarted }[name];
     if (fn) fn();
   } catch (e) { /* a screen must never break navigation */ }
 }
@@ -1025,7 +1064,8 @@ var SEC_ICONS = {
   learn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h13"/></svg>',
   herbarium: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8"/><path d="M12 13c0-3.5 2.5-6 6-6 0 3.5-2.5 6-6 6z"/><path d="M12 13c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z"/></svg>',
   articles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v6h6M9 13h7M9 17h7"/></svg>',
-  progress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>'
+  progress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
+  game: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v4M5 13h4"/><circle cx="16" cy="11.5" r="1" fill="currentColor"/><circle cx="18.5" cy="14" r="1" fill="currentColor"/></svg>'
 };
 
 /* theme picker card (Home): three worlds, one tap switches and re-renders */
@@ -1054,7 +1094,8 @@ function sectionGrid() {
     ['learn', 'Learning path', practiced + '/' + list.length + ' practiced', '#7fb5e8'],
     ['herbarium', T('collection', 'Herbarium'), herbProg.known + '/' + herbProg.total + ' discovered', '#e08ac0'],
     ['articles', 'Articles', getArticles().length + ' pages', '#f0a05a'],
-    ['progress', 'Progress', fmtNum(S.lifetime) + ' lifetime', '#7fb5e8']
+    ['progress', 'Progress', fmtNum(S.lifetime) + ' lifetime', '#7fb5e8'],
+    ['game', 'Sprout climb', 'Mini-game · ' + fmtNum(S.credits) + ' credits', '#9fe0b8']
   ];
   var html = '<span class="kicker k-sage">Explore</span><h2 class="giant-sm">Open a section</h2><div class="sec-grid">';
   for (i = 0; i < items.length; i++) {
@@ -1571,6 +1612,37 @@ function checklistDay() {
   return S.checklist[k];
 }
 
+/* ---------------- adhkar credit wallet ----------------
+   Each checklist item awards 1-4 credits once per day per period.
+   Unchecking never revokes; rechecking never double-awards. */
+function itemCredits(it) {
+  var c = Number(it && it.credits);
+  if (!(c >= 1 && c <= 9)) c = 1;
+  return Math.round(c);
+}
+function awardCredits(period, idx, it) {
+  var k = todayKey();
+  if (!S.creditAwards[k] || typeof S.creditAwards[k] !== 'object') S.creditAwards[k] = { morning: {}, evening: {} };
+  var rec = S.creditAwards[k][period];
+  if (!rec || typeof rec !== 'object') rec = S.creditAwards[k][period] = {};
+  if (rec[idx]) return 0;
+  var c = itemCredits(it);
+  rec[idx] = c;
+  S.credits = (Number(S.credits) || 0) + c;
+  var keys = Object.keys(S.creditAwards).sort();
+  while (keys.length > 14) { delete S.creditAwards[keys.shift()]; }
+  saveState();
+  return c;
+}
+function creditWalletCard(withPlay) {
+  var html = '<div class="card"><div class="row-between"><div><span class="kicker k-gold">🪙 Adhkar credits</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.credits) + '</div></div>' +
+    (withPlay ? '<button class="btn-gold" data-go="game">Play Sprout 🕹️</button>' : '') + '</div>' +
+    '<p class="muted" style="margin:8px 0 0">Earn credits by completing morning &amp; evening adhkar — harder ones are worth more. ' +
+    'Each climb costs ' + SPROUT_COST + ' credits.</p></div>';
+  return html;
+}
+
 function renderDaily() {
   var sec = el('screen-daily');
   if (!sec) return;
@@ -1587,6 +1659,8 @@ function renderDaily() {
     '<h2 style="margin:6px 0 4px">Awrad al-Tahsin</h2>' +
     '<p class="muted">Play the audio recitation in a new tab, then follow along while you check off the list below.</p>' +
     '<a class="btn-gold" style="display:block;text-align:center;text-decoration:none" href="https://www.aicp.org/index.php/islamic-information/audio/2015-06-04-14-18-23/558-2015-09-27-15-26-58" target="_blank" rel="noopener">▶ Play audio</a></div>';
+
+  html += creditWalletCard(true);
 
   var items = dailyTab === 'morning' ? mItems : eItems;
   var day = checklistDay();
@@ -1651,7 +1725,11 @@ function renderDaily() {
       var body = row.querySelector('.translit-body');
       if (box) box.addEventListener('change', function () {
         var d = checklistDay();
-        if (box.checked) d[dailyTab][idx] = 1; else delete d[dailyTab][idx];
+        if (box.checked) {
+          d[dailyTab][idx] = 1;
+          var gained = awardCredits(dailyTab, idx, items[idx]);
+          if (gained > 0) toast('+' + gained + ' adhkar credits 🪙');
+        } else delete d[dailyTab][idx];
         saveState();
         renderDaily(); // refresh list + summary (toggle states reset — acceptable)
       });
@@ -1675,9 +1753,9 @@ var LEARN_ITEMS = [
   { desc: 'Learn tahmid', name: 'alhamdulillah', dhikrId: 'alhamdulillah' },
   { desc: 'Plant with praise', name: 'subhanallah wa bihamdihi', dhikrId: 'subhanallahi-wa-bihamdihi' },
   { desc: 'Ask forgiveness', name: 'Astaghfirullah', dhikrId: 'astaghfirullah' },
-  { desc: 'Include your parents', name: 'Rabi-ghfir li wa liwalidayya',
+  { desc: 'Include your parents', name: 'Rabi-ghfirli wa liwalidayya',
     arabic: '\u0631\u064e\u0628\u0650\u0651 \u0627\u063a\u0652\u0641\u0650\u0631\u0652 \u0644\u0650\u064a \u0648\u064e\u0644\u0650\u0648\u064e\u0627\u0644\u0650\u062f\u064e\u064a\u064e\u0651',
-    transliteration: 'Rabi-ghfir li wa liwalidayya',
+    transliteration: 'Rabi-ghfirli wa liwalidayya',
     translation: 'My Lord, forgive me and my parents.' },
   { desc: 'Learn the longer istighfar', name: 'Astaghfirullaha-ladhi la ilaha illa Huwa-l-Hayy-al-Qayyum wa atubu ilayh',
     arabic: '\u0623\u064e\u0633\u0652\u062a\u064e\u063a\u0652\u0641\u0650\u0631\u064f \u0627\u0644\u0644\u0647\u064e \u0627\u0644\u0630\u0650\u064a \u0644\u0627 \u0625\u0650\u0644\u0647\u064e \u0625\u0650\u0644\u0627 \u0647\u064f\u0648\u064e \u0627\u0644\u0652\u062d\u064e\u064a\u064f\u0651 \u0627\u0644\u0652\u0642\u064e\u064a\u064f\u0651\u0648\u0645\u064f \u0648\u064e\u0623\u064e\u062a\u064f\u0648\u0628\u064f \u0625\u0650\u0644\u064e\u064a\u0652\u0647\u0650',
@@ -1716,7 +1794,7 @@ function renderLearnTimeline() {
   var html = '<button class="backlink" data-go="home">\u2190 ' + esc(T('homeName', 'Garden')) + '</button>' +
     '<span class="kicker k-sage">A path, not a race</span>' +
     '<div class="giant">Learn one phrase at a time.</div>' +
-    '<p class="lede">The four most beloved words are tahlil, takbir, tasbih, and tahmid. Begin there, then continue into daily remembrance.</p>';
+    '<p class="lede">The four most accepted words are tahlil, takbir, tasbih, and tahmid. Begin there, then continue into daily remembrance.</p>';
   html += '<div class="lp-track"><div class="lp-fill" style="width:' + pct + '%"><span>' +
     practiced + ' of ' + LEARN_ITEMS.length + ' practiced</span></div></div>';
   html += '<div class="learn-timeline">';
@@ -2132,6 +2210,296 @@ function renderGettingStarted() {
   sec.innerHTML = html;
   var b = el('gs-go');
   if (b) b.addEventListener('click', function () { showScreen('practice'); });
+}
+
+/* ---------------- SPROUT mini-game (Doodle Jump-style climber) ----------------
+   Skill only: Sprout auto-bounces, the player steers by touch-and-slide
+   (pointer events — no buttons). Platforms generate endlessly upward via a
+   deterministic seeded PRNG; the run ends when Sprout falls. The animation
+   loop draws straight to canvas and NEVER re-renders the app per frame. */
+var sproutG = null; // active run state, or null
+
+function sproutSkin() {
+  var t = (typeof currentTheme === 'function') ? currentTheme() : 'garden';
+  if (t === 'highway') return { bgTop: '#182236', bgBot: '#0a0e16', plat: '#46586f', edge: '#ffd23f', deco: '🏁', name: 'Turbo Climb' };
+  if (t === 'mine') return { bgTop: '#2b1f12', bgBot: '#0f0b07', plat: '#7a5636', edge: '#ffcf6e', deco: '💎', name: 'Shaft Climb' };
+  return { bgTop: '#16281d', bgBot: '#0b100e', plat: '#2f6b4f', edge: '#9fe0b8', deco: '🌸', name: 'Sprout Climb' };
+}
+
+function stopSprout() {
+  if (sproutG) {
+    if (sproutG.raf) { try { cancelAnimationFrame(sproutG.raf); } catch (e) {} }
+    sproutG = null;
+  }
+  try {
+    var c = el('sprout-canvas');
+    if (c) { c.onpointerdown = c.onpointermove = c.onpointerup = c.onpointercancel = null; }
+  } catch (e) {}
+}
+
+function sproutUnlockCheck() {
+  var newly = [];
+  for (var i = 0; i < SPROUT_COSTUMES.length; i++) {
+    var c = SPROUT_COSTUMES[i];
+    if (S.sproutHigh >= c.at && S.sproutCostumes.indexOf(c.id) === -1) {
+      S.sproutCostumes.push(c.id);
+      newly.push(c);
+    }
+  }
+  if (newly.length) saveState();
+  return newly;
+}
+
+function sproutRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function sproutAddPlat(G) {
+  var top = G.plats.length ? G.plats[G.plats.length - 1].wy : 30;
+  var gap = 62 + G.rng() * 46; // 62..108px — always clearable (jump height ~139px)
+  var w = G.PW;
+  G.plats.push({ x: G.rng() * (G.W - w), wy: top - gap, w: w });
+}
+
+function sproutStep(G, dt) {
+  if (G.ptr) {
+    var want = (G.ptrX - G.x) * 18;
+    if (want > 520) want = 520;
+    if (want < -520) want = -520;
+    G.vx = want;
+  } else {
+    G.vx *= Math.pow(0.0005, dt);
+    if (Math.abs(G.vx) < 4) G.vx = 0;
+  }
+  var prevBottom = G.wy + 17;
+  G.vy += G.GRAV * dt;
+  if (G.vy > 1400) G.vy = 1400;
+  G.wy += G.vy * dt;
+  G.x += G.vx * dt;
+  if (G.x < -20) G.x += G.W + 40;
+  if (G.x > G.W + 20) G.x -= G.W + 40;
+  if (G.vy > 0) {
+    var nb = G.wy + 17;
+    for (var i = 0; i < G.plats.length; i++) {
+      var p = G.plats[i];
+      if (prevBottom <= p.wy && nb >= p.wy && G.x + 14 > p.x && G.x - 14 < p.x + p.w) {
+        G.wy = p.wy - 17;
+        G.vy = -G.BOUNCE;
+        break;
+      }
+    }
+  }
+  if (G.wy < G.camY + G.H * 0.42) G.camY = G.wy - G.H * 0.42;
+  if (G.wy < G.minWy) { G.minWy = G.wy; G.score = Math.floor(-G.minWy / 10); }
+  var highest = G.plats[G.plats.length - 1].wy;
+  while (highest > G.camY - 80) { sproutAddPlat(G); highest = G.plats[G.plats.length - 1].wy; }
+  while (G.plats.length && G.plats[0].wy > G.camY + G.H + 80) G.plats.shift();
+  if (G.wy - G.camY > G.H + 60) sproutGameOver(G);
+}
+
+function sproutDraw(G) {
+  var ctx = G.ctx, W = G.W, H = G.H, skin = G.skin, i;
+  var bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, skin.bgTop); bg.addColorStop(1, skin.bgBot);
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,0.05)';
+  for (i = 0; i < 24; i++) {
+    var dx = (i * 97) % W;
+    var yy = (((i * 57) % H - G.camY * 0.3) % H + H) % H;
+    ctx.fillRect(dx, yy, 3, 3);
+  }
+  for (i = 0; i < G.plats.length; i++) {
+    var p = G.plats[i], sy = p.wy - G.camY;
+    if (sy < -30 || sy > H + 30) continue;
+    ctx.fillStyle = skin.plat;
+    sproutRoundRect(ctx, p.x, sy, p.w, G.PH, 7); ctx.fill();
+    ctx.fillStyle = skin.edge;
+    ctx.fillRect(p.x + 4, sy, p.w - 8, 3);
+    if (i % 4 === 1) { ctx.font = '14px serif'; ctx.fillText(skin.deco, p.x + p.w / 2 - 7, sy + 2); }
+  }
+  var sxy = G.wy - G.camY;
+  ctx.font = '36px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(G.costume.emoji, G.x, sxy);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  sproutRoundRect(ctx, 10, 10, 118, 34, 10); ctx.fill();
+  ctx.fillStyle = '#f4efe3'; ctx.font = '700 16px Nunito,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('▲ ' + G.score, 22, 28);
+  ctx.textAlign = 'right';
+  ctx.fillText('Best ' + Math.max(S.sproutHigh, G.score), W - 22, 28);
+}
+
+function sproutGameOver(G) {
+  if (G.over) return;
+  G.over = true;
+  if (sproutG === G) {
+    if (G.raf) { try { cancelAnimationFrame(G.raf); } catch (e) {} }
+    sproutG = null;
+  }
+  var isHigh = G.score > S.sproutHigh;
+  if (isHigh) S.sproutHigh = G.score;
+  var newly = sproutUnlockCheck();
+  saveState();
+  var over = el('sprout-over');
+  if (!over) return;
+  var canAfford = (Number(S.credits) || 0) >= SPROUT_COST;
+  var html = '<div class="sprout-result"><div style="font-size:2.6rem">🌟</div>' +
+    '<h2>Climb over!</h2><div class="sprout-score">' + fmtNum(G.score) + '</div>' +
+    (isHigh ? '<p class="kicker k-gold">New best climb!</p>' : '<p class="muted">Best: ' + fmtNum(S.sproutHigh) + '</p>');
+  for (var i = 0; i < newly.length; i++) {
+    html += '<p class="kicker k-gold">🎽 New costume unlocked: ' + esc(newly[i].name) + ' ' + newly[i].emoji + '</p>';
+  }
+  html += '<div class="btn-row" style="justify-content:center">' +
+    '<button class="btn-gold" id="sprout-again"' + (canAfford ? '' : ' disabled') + '>' +
+    (canAfford ? 'Climb again · ' + SPROUT_COST + ' 🪙' : 'Need ' + SPROUT_COST + ' 🪙 for another climb') + '</button>' +
+    '<button class="btn-ghost" id="sprout-done">Done</button></div></div>';
+  over.innerHTML = html;
+  over.hidden = false;
+  var again = el('sprout-again');
+  if (again && canAfford) again.addEventListener('click', function () { startSproutRun(); });
+  var done = el('sprout-done');
+  if (done) done.addEventListener('click', function () { renderGame(); });
+  if (isHigh) {
+    try { celebrate({ emoji: '🧗', title: 'New best climb!', sub: 'You reached ' + fmtNum(G.score) + ' — alhamdulillah!' }); } catch (e) {}
+  }
+}
+
+function startSproutRun() {
+  if ((Number(S.credits) || 0) < SPROUT_COST) { toast('Not enough credits yet 🪙'); return; }
+  S.credits -= SPROUT_COST;
+  S.sproutAttempts++;
+  saveState();
+  var wrap = el('sprout-wrap'), canvas = el('sprout-canvas'), over = el('sprout-over'), startCard = el('sprout-start-card');
+  if (!wrap || !canvas) return;
+  stopSprout();
+  wrap.hidden = false;
+  if (over) over.hidden = true;
+  if (startCard) startCard.style.display = 'none';
+  var skin = sproutSkin();
+  var dpr = (typeof window.devicePixelRatio === 'number' && window.devicePixelRatio > 0) ? window.devicePixelRatio : 1;
+  var W = wrap.clientWidth || 340, H = 480;
+  canvas.style.height = H + 'px';
+  try {
+    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  } catch (e) {}
+  var ctx = canvas.getContext('2d');
+  if (!ctx) { toast('Game unavailable on this device'); return; }
+  try { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {}
+  var rng = sproutRng(S.sproutAttempts * 7919 + 13);
+  var G = {
+    ctx: ctx, W: W, H: H, skin: skin, rng: rng,
+    x: W / 2, wy: 0, vy: 0, vx: 0,
+    camY: 0, minWy: 0, score: 0,
+    plats: [], raf: 0, last: 0, over: false,
+    ptr: false, ptrX: W / 2,
+    costume: sproutCostumeById(S.sproutEquipped),
+    GRAV: 2300, BOUNCE: 800, PW: 66, PH: 14
+  };
+  G.plats.push({ x: W / 2 - G.PW / 2, wy: 30, w: G.PW });
+  for (var i = 0; i < 14; i++) sproutAddPlat(G);
+  G.vy = -G.BOUNCE; // launch immediately — the first jump starts with the run
+  sproutG = G;
+  function toX(e) {
+    try {
+      var r = canvas.getBoundingClientRect();
+      return e.clientX - r.left;
+    } catch (err) { return G.x; }
+  }
+  canvas.onpointerdown = function (e) {
+    G.ptr = true; G.ptrX = toX(e);
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    if (e.preventDefault) e.preventDefault();
+  };
+  canvas.onpointermove = function (e) { if (G.ptr) G.ptrX = toX(e); };
+  function endPtr() { G.ptr = false; }
+  canvas.onpointerup = endPtr; canvas.onpointercancel = endPtr;
+  try {
+    var perf = (typeof performance !== 'undefined' && performance.now) ? performance : Date;
+    G.last = perf.now();
+    var nowFn = function () { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); };
+    var frame = function () {
+      if (!sproutG || sproutG !== G || G.over) return;
+      var t = nowFn(), dt = (t - G.last) / 1000;
+      G.last = t;
+      if (dt > 0.05) dt = 0.05;
+      if (dt < 0) dt = 0;
+      sproutStep(G, dt);
+      sproutDraw(G);
+      if (!G.over) G.raf = requestAnimationFrame(frame);
+    };
+    G.raf = requestAnimationFrame(frame);
+  } catch (e) { /* loop optional */ }
+  try { wrap.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+}
+
+function renderGame() {
+  var sec = el('screen-game');
+  if (!sec) return;
+  stopSprout();
+  var skin = sproutSkin();
+  var eq = sproutCostumeById(S.sproutEquipped);
+  var canAfford = (Number(S.credits) || 0) >= SPROUT_COST;
+  var html = '<button class="backlink" data-go="home">← Home</button>' +
+    '<span class="kicker k-sage">Skill game · no luck, just you</span>' +
+    '<h1 class="giant">' + esc(skin.name) + '</h1>' +
+    '<p class="lede">Sprout bounces on his own — press and slide your finger anywhere in the play area to steer. ' +
+    'Climb as high as you can; the run ends if you fall.</p>';
+
+  html += '<div class="card"><div class="row-between"><div><span class="kicker k-gold">🪙 Adhkar credits</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.credits) + '</div></div>' +
+    '<div style="text-align:right"><span class="kicker k-sage">Best climb</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.sproutHigh) + '</div></div></div>' +
+    '<p class="muted" style="margin:8px 0 0">Each climb costs ' + SPROUT_COST + ' credits, earned from morning &amp; evening adhkar.</p></div>';
+
+  html += '<div class="card"><span class="kicker k-sage">Sprout&rsquo;s wardrobe</span><div class="costume-grid">';
+  for (var i = 0; i < SPROUT_COSTUMES.length; i++) {
+    (function (c) {
+      var owned = S.sproutCostumes.indexOf(c.id) !== -1;
+      var active = S.sproutEquipped === c.id;
+      html += '<button class="costume' + (active ? ' active' : '') + '" data-costume="' + c.id + '"' + (owned ? '' : ' disabled') + '>' +
+        '<span class="costume-emoji">' + (owned ? c.emoji : '🔒') + '</span>' +
+        '<b>' + esc(c.name) + '</b>' +
+        '<i>' + (owned ? (active ? 'Wearing' : 'Tap to wear') : 'Score ' + fmtNum(c.at)) + '</i></button>';
+    })(SPROUT_COSTUMES[i]);
+  }
+  html += '</div></div>';
+
+  html += '<div class="card sprout-wrap" id="sprout-wrap" hidden>' +
+    '<canvas id="sprout-canvas" class="sprout-canvas"></canvas>' +
+    '<div class="sprout-over" id="sprout-over" hidden></div></div>';
+
+  html += '<div class="card" style="text-align:center" id="sprout-start-card">' +
+    '<div style="font-size:2.4rem">' + eq.emoji + '</div>' +
+    '<p class="muted">Ready, ' + esc(eq.name) + '?</p>' +
+    '<button class="btn-gold" id="sprout-start"' + (canAfford ? '' : ' disabled') + '>' +
+    (canAfford ? 'Start climb · ' + SPROUT_COST + ' 🪙' : 'Need ' + SPROUT_COST + ' credits to climb') + '</button>' +
+    (canAfford ? '' : '<p class="muted" style="margin-top:8px">Complete morning &amp; evening adhkar to earn credits.</p>') +
+    '</div>';
+
+  sec.innerHTML = html;
+
+  var gos = sec.querySelectorAll('[data-go]');
+  for (var g = 0; g < gos.length; g++) {
+    (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[g]);
+  }
+  var cos = sec.querySelectorAll('[data-costume]');
+  for (var k = 0; k < cos.length; k++) {
+    (function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-costume');
+        if (S.sproutCostumes.indexOf(id) !== -1) { S.sproutEquipped = id; saveState(); renderGame(); }
+      });
+    })(cos[k]);
+  }
+  var start = el('sprout-start');
+  if (start && canAfford) start.addEventListener('click', function () { startSproutRun(); });
 }
 
 /* ---------------- navigation wiring ---------------- */

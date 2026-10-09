@@ -5,6 +5,7 @@
 const DG_SHARED = [
   {
     id: "sayyid-istighfar",
+    credits: 4,
     arabic: "اللَّهُمَّ أَنْتَ رَبِّي لَا إِلَهَ إِلَّا أَنْتَ، خَلَقْتَنِي وَأَنَا عَبْدُكَ، وَأَنَا عَلَى عَهْدِكَ وَوَعْدِكَ مَا اسْتَطَعْتُ، أَعُوذُ بِكَ مِنْ شَرِّ مَا صَنَعْتُ، أَبُوءُ لَكَ بِنِعْمَتِكَ عَلَيَّ، وَأَبُوءُ بِذَنْبِي فَاغْفِرْ لِي، فَإِنَّهُ لَا يَغْفِرُ الذُّنُوبَ إِلَّا أَنْتَ",
     transliteration: "Allahumma anta rabbi, la ilaha illa anta, khalaqtani wa ana 'abduk, wa ana 'ala 'ahdika wa wa'dika masta-ta't, a'udhu bika min sharri ma sana't, abu'u laka bini'matika 'alayy, wa abu'u bidhanbi, faghfir li, fa innahu la yaghfirudh-dhunuba illa ant",
     translation: "O Allah, You are my Lord; there is no deity but You. You created me and I am Your servant. I uphold Your covenant and promise as best I can. I seek refuge in You from the evil of what I have done. I acknowledge Your favor upon me and I acknowledge my sins, so forgive me — for none forgives sins but You.",
@@ -13,6 +14,7 @@ const DG_SHARED = [
   },
   {
     id: "alim-al-ghayb",
+    credits: 3,
     arabic: "اللَّهُمَّ عَالِمَ الْغَيْبِ وَالشَّهَادَةِ، فَاطِرَ السَّمَاوَاتِ وَالْأَرْضِ، رَبَّ كُلِّ شَيْءٍ وَمَلِيكَهُ، أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا أَنْتَ، أَعُوذُ بِكَ مِنْ شَرِّ نَفْسِي وَمِنْ شَرِّ الشَّيْطَانِ وَشِرْكِهِ، وَأَنْ أَقْتَرِفَ عَلَى نَفْسِي سُوءًا أَوْ أَجُرَّهُ إِلَى مُسْلِمٍ",
     transliteration: "Allahumma 'alimal-ghaybi wash-shahadah, fatiras-samawati wal-ard, rabba kulli shay'in wa malikah, ash-hadu an la ilaha illa anta, a'udhu bika min sharri nafsi, wa min sharrish-shaytani wa shirkihi, wa an aqtarifa 'ala nafsi su'an, aw ajurrahu ila muslim",
     translation: "O Allah, Knower of the unseen and the seen, Creator of the heavens and the earth, Lord and Sovereign of all things: I bear witness that there is no deity but You. I seek refuge in You from the evil of my soul, from the evil of Satan and his traps, and from wronging myself or bringing harm upon a Muslim.",
@@ -21,6 +23,7 @@ const DG_SHARED = [
   },
   {
     id: "ushhiduk",
+    credits: 2,
     arabic: "اللَّهُمَّ إِنِّي أُشْهِدُكَ وَأُشْهِدُ حَمَلَةَ عَرْشِكَ وَمَلَائِكَتَكَ وَجَمِيعَ خَلْقِكَ أَنَّكَ أَنْتَ اللهُ لَا إِلَهَ إِلَّا أَنْتَ وَحْدَكَ لَا شَرِيكَ لَكَ وَأَنَّ مُحَمَّدًا عَبْدُكَ وَرَسُولُكَ",
     transliteration: "Allahumma inni ash-haduka wa ash-hadu hamalata 'arshika wa mala'ikataka wa jami'a khalqik, annaka anta Allahu la ilaha illa anta, wahdaka la sharika lak, wa anna Muhammadan 'abduka wa rasuluk",
     translation: "O Allah, I call You to witness, and I call the bearers of Your Throne, Your angels, and all Your creation to witness, that You are Allah — there is no deity but You, alone without partner — and that Muhammad is Your servant and Messenger.",
@@ -29,6 +32,7 @@ const DG_SHARED = [
   },
   {
     id: "muawwidhat-ikhlas",
+    credits: 2,
     arabic: "قُلْ هُوَ اللهُ أَحَدٌ ۝ اللهُ الصَّمَدُ ۝ لَمْ يَلِدْ وَلَمْ يُولَدْ ۝ وَلَمْ يَكُنْ لَهُ كُفُوًا أَحَدٌ",
     transliteration: "Qul huwAllahu ahad. Allahus-samad. Lam yalid wa lam yulad. Wa lam yakul-lahu kufuwan ahad.",
     translation: "Surah Al-Ikhlas (112): Say, He is Allah, the One; Allah, the Eternal Refuge. He neither begets nor is born, and there is none like Him.",
@@ -37,6 +41,7 @@ const DG_SHARED = [
   },
   {
     id: "muawwidhat-falaq",
+    credits: 3,
     arabic: "قُلْ أَعُوذُ بِرَبِّ الْفَلَقِ ۝ مِنْ شَرِّ مَا خَلَقَ ۝ وَمِنْ شَرِّ غَاسِقٍ إِذَا وَقَبَ ۝ وَمِنْ شَرِّ النَّفَّاثَاتِ فِي الْعُقَدِ ۝ وَمِنْ شَرِّ حَاسِدٍ إِذَا حَسَدَ",
     transliteration: "Qul a'udhu birabbil-falaq. Min sharri ma khalaq. Wa min sharri ghasiqin idha waqab. Wa min sharrin-naffathati fil-'uqad. Wa min sharri hasidin idha hasad.",
     translation: "Surah Al-Falaq (113): Say, I seek refuge in the Lord of the daybreak, from the evil of what He created, from the evil of darkness when it settles, from the evil of those who blow on knots, and from the evil of the envier when he envies.",
@@ -45,6 +50,7 @@ const DG_SHARED = [
   },
   {
     id: "muawwidhat-nas",
+    credits: 3,
     arabic: "قُلْ أَعُوذُ بِرَبِّ النَّاسِ ۝ مَلِكِ النَّاسِ ۝ إِلَهِ النَّاسِ ۝ مِنْ شَرِّ الْوَسْوَاسِ الْخَنَّاسِ ۝ الَّذِي يُوَسْوِسُ فِي صُدُورِ النَّاسِ ۝ مِنَ الْجِنَّةِ وَالنَّاسِ",
     transliteration: "Qul a'udhu birabbin-nas. Malikin-nas. Ilahin-nas. Min sharril-waswasil-khannas. Alladhi yuwaswisu fi sudurin-nas. Minal-jinnati wan-nas.",
     translation: "Surah An-Nas (114): Say, I seek refuge in the Lord of mankind, the King of mankind, the God of mankind, from the evil of the retreating whisperer, who whispers into the chests of mankind, from among jinn and men.",
@@ -53,6 +59,7 @@ const DG_SHARED = [
   },
   {
     id: "bismillahil-ladhi",
+    credits: 3,
     arabic: "بِسْمِ اللهِ الَّذِي لَا يَضُرُّ مَعَ اسْمِهِ شَيْءٌ فِي الْأَرْضِ وَلَا فِي السَّمَاءِ وَهُوَ السَّمِيعُ الْعَلِيمُ",
     transliteration: "Bismillahil-ladhi la yadurru ma'a-smihi shay'un fil-ardi wa la fis-sama'i, wa huwas-sami'ul-'alim",
     translation: "In the name of Allah, the One with Whose Name nothing on Earth or in the sky can harm, and He is the One Who hears and knows.",
@@ -61,6 +68,7 @@ const DG_SHARED = [
   },
   {
     id: "dua-al-hamm",
+    credits: 3,
     arabic: "لَا إِلَهَ إِلَّا اللهُ الْعَظِيمُ الْحَلِيمُ، لَا إِلَهَ إِلَّا اللهُ رَبُّ الْعَرْشِ الْعَظِيمِ، لَا إِلَهَ إِلَّا اللهُ رَبُّ السَّمَاوَاتِ وَرَبُّ الْأَرْضِ وَرَبُّ الْعَرْشِ الْكَرِيمِ",
     transliteration: "La ilaha illallahul-'azimul-halim. La ilaha illallahu rabbul-'arshil-'azim. La ilaha illallahu rabbus-samawati wa rabbul-ardi wa rabbul-'arshil-karim",
     translation: "There is no deity but Allah, the Magnificent, the Forbearing. There is no deity but Allah, Lord of the Magnificent Throne. There is no deity but Allah, Lord of the heavens, Lord of the earth, and Lord of the Noble Throne.",
@@ -69,6 +77,7 @@ const DG_SHARED = [
   },
   {
     id: "hasbiyallah",
+    credits: 2,
     arabic: "حَسْبِيَ اللهُ لَا إِلَهَ إِلَّا هُوَ عَلَيْهِ تَوَكَّلْتُ وَهُوَ رَبُّ الْعَرْشِ الْعَظِيمِ",
     transliteration: "Hasbiyallahu la ilaha illa huwa, 'alayhi tawakkaltu, wa huwa rabbul-'arshil-'azim",
     translation: "Allah is sufficient for me; there is no deity but Him. Upon Him I rely, and He is the Lord of the Mighty Throne.",
@@ -77,6 +86,7 @@ const DG_SHARED = [
   },
   {
     id: "mann-shahida",
+    credits: 2,
     arabic: "أَشْهَدُ أَنْ لَا إِلَهَ إِلَّا اللهُ وَأَشْهَدُ أَنَّ مُحَمَّدًا رَسُولُ اللهِ",
     transliteration: "Ash-hadu an la ilaha illa Allah, wa ash-hadu anna Muhammadan rasulullah",
     translation: "I bear witness that there is no deity but Allah, and I bear witness that Muhammad is the Messenger of Allah.",
@@ -85,22 +95,25 @@ const DG_SHARED = [
   },
   {
     id: "raditu-billahi",
+    credits: 2,
     arabic: "رَضِيتُ بِاللهِ رَبًّا وَبِالْإِسْلَامِ دِينًا وَبِمُحَمَّدٍ صَلَّى اللهُ عَلَيْهِ وَسَلَّمَ نَبِيًّا",
-    transliteration: "Raditu billahi rabba, wa bil-islami dina, wa bi-Muhammadin sallallahu 'alayhi wa sallama nabiyya",
+    transliteration: "Raditu billahi rabba, wa bil-islami dina, wa bi-Muhammadin sallallahu ^alayhi wa sallam nabiyya",
     translation: "I am pleased with Allah as my Lord, with Islam as my religion, and with Muhammad ﷺ as my Prophet.",
     count: "3x",
     note: "Said three times."
   },
   {
     id: "subhanallahi-wa-bihamdihi-am",
+    credits: 3,
     arabic: "سُبْحَانَ اللهِ وَبِحَمْدِهِ",
-    transliteration: "SubhanAllahi wa bihamdihi",
+    transliteration: "subhanallah wa bihamdihi",
     translation: "Glory be to Allah and praise Him.",
     count: "100x",
     note: "Whoever says it 100 times, his sins are forgiven even if like the foam of the sea."
   },
   {
     id: "ya-hayyu-ya-qayyum",
+    credits: 2,
     arabic: "يَا حَيُّ يَا قَيُّومُ بِرَحْمَتِكَ أَسْتَغِيثُ، أَصْلِحْ لِي شَأْنِي كُلَّهُ، وَلَا تَكِلْنِي إِلَى نَفْسِي طَرْفَةَ عَيْنٍ",
     transliteration: "Ya Hayyu Ya Qayyum, bi rahmatika astaghith, aslih li sha'ni kullah, wa la takilni ila nafsi tarfata 'ayn",
     translation: "O Ever-Living, O Self-Sustaining: by Your mercy I seek help. Rectify all my affairs, and do not leave me to myself even for the blink of an eye.",
@@ -113,6 +126,7 @@ const DG_SHARED = [
 const DG_MORNING_ONLY = [
   {
     id: "bika-asbahna",
+    credits: 2,
     arabic: "اللَّهُمَّ بِكَ أَصْبَحْنَا وَبِكَ أَمْسَيْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ وَإِلَيْكَ النُّشُورُ",
     transliteration: "Allahumma bika asbahna, wa bika amsayna, wa bika nahya, wa bika namut, wa ilaykan-nushur",
     translation: "O Allah, by You we enter the morning and by You we enter the evening; by You we live and by You we die, and to You is the resurrection.",
@@ -121,6 +135,7 @@ const DG_MORNING_ONLY = [
   },
   {
     id: "ayat-al-kursi",
+    credits: 4,
     arabic: "اللهُ لَا إِلَهَ إِلَّا هُوَ الْحَيُّ الْقَيُّومُ، لَا تَأْخُذُهُ سِنَةٌ وَلَا نَوْمٌ، لَهُ مَا فِي السَّمَاوَاتِ وَمَا فِي الْأَرْضِ، مَنْ ذَا الَّذِي يَشْفَعُ عِنْدَهُ إِلَّا بِإِذْنِهِ، يَعْلَمُ مَا بَيْنَ أَيْدِيهِمْ وَمَا خَلْفَهُمْ، وَلَا يُحِيطُونَ بِشَيْءٍ مِنْ عِلْمِهِ إِلَّا بِمَا شَاءَ، وَسِعَ كُرْسِيُّهُ السَّمَاوَاتِ وَالْأَرْضَ، وَلَا يَئُودُهُ حِفْظُهُمَا، وَهُوَ الْعَلِيُّ الْعَظِيمُ",
     transliteration: "Allahu la ilaha illa huwal-hayyul-qayyum. La ta'khudhuhu sinatun wa la nawm. Lahu ma fis-samawati wa ma fil-ard. Man dhal-ladhi yashfa'u 'indahu illa bi-idhnih. Ya'lamu ma bayna aydihim wa ma khalfahum, wa la yuhituna bi shay'in min 'ilmihi illa bima sha'. Wasi'a kursiyyuhus-samawati wal-ard, wa la ya'uduhu hifdhuhuma, wa huwal-'aliyyul-'azim",
     translation: "Allah — there is no deity but Him, the Ever-Living, the Self-Sustaining. Neither slumber nor sleep overtakes Him. To Him belongs all that is in the heavens and all that is on earth. Who can intercede with Him except by His permission? He knows what is before them and what is behind them, and they encompass nothing of His knowledge except what He wills. His Throne extends over the heavens and the earth, and their preservation does not tire Him. He is the Most High, the Magnificent.",
@@ -129,14 +144,16 @@ const DG_MORNING_ONLY = [
   },
   {
     id: "la-ilaha-wahdahu",
+    credits: 3,
     arabic: "لَا إِلَهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ",
     transliteration: "La ilaha illallahu wahdahu la sharika lah, lahul-mulku wa lahul-hamd, wa huwa 'ala kulli shay'in qadir",
     translation: "There is no deity but Allah, alone without partner; His is the dominion and His is the praise, and He has power over all things.",
-    count: "100x",
-    note: "Whoever says it 100 times in a day earns a reward like freeing ten slaves, and it is a protection from Satan until evening."
+    count: null,
+    note: "Said once."
   },
   {
     id: "a-udhu-bikalimatillah",
+    credits: 2,
     arabic: "أَعُوذُ بِكَلِمَاتِ اللهِ التَّامَّاتِ مِنْ شَرِّ مَا خَلَقَ",
     transliteration: "A'udhu bikalimatillahit-tammati min sharri ma khalaq",
     translation: "I seek refuge in the perfect words of Allah from the evil of what He has created.",
@@ -145,10 +162,20 @@ const DG_MORNING_ONLY = [
   }
 ];
 
-/* Evening-only remembrances (1) */
+/* Evening-only remembrances (2) */
 const DG_EVENING_ONLY = [
   {
+    id: "bika-amsayna",
+    credits: 2,
+    arabic: "اللَّهُمَّ بِكَ أَمْسَيْنَا وَبِكَ أَصْبَحْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ وَإِلَيْكَ الْمَصِيرُ",
+    transliteration: "Allahumma bika amsayna, wa bika asbahna, wa bika nahya, wa bika namut, wa ilaykal-masir",
+    translation: "O Allah, by You we enter the evening and by You we enter the morning; by You we live and by You we die, and to You is the return.",
+    count: null,
+    note: "Said in the evening."
+  },
+  {
     id: "amsayna",
+    credits: 3,
     arabic: "أَمْسَيْنَا وَأَمْسَى الْمُلْكُ لِلَّهِ وَالْحَمْدُ لِلَّهِ، لَا إِلَهَ إِلَّا اللهُ وَحْدَهُ لَا شَرِيكَ لَهُ، لَهُ الْمُلْكُ وَلَهُ الْحَمْدُ وَهُوَ عَلَى كُلِّ شَيْءٍ قَدِيرٌ، رَبِّ أَسْأَلُكَ خَيْرَ مَا فِي هَذِهِ اللَّيْلَةِ وَخَيْرَ مَا بَعْدَهَا، وَأَعُوذُ بِكَ مِنْ شَرِّ مَا فِي هَذِهِ اللَّيْلَةِ وَشَرِّ مَا بَعْدَهَا، رَبِّ أَعُوذُ بِكَ مِنَ الْكَسَلِ وَسُوءِ الْكِبَرِ، رَبِّ أَعُوذُ بِكَ مِنْ عَذَابٍ فِي النَّارِ وَعَذَابٍ فِي الْقَبْرِ",
     transliteration: "Amsayna wa amsal-mulku lillah, wal-hamdu lillah, la ilaha illallahu wahdahu la sharika lah, lahul-mulku wa lahul-hamd, wa huwa 'ala kulli shay'in qadir. Rabbi as'aluka khayra ma fi hadhihil-laylati wa khayra ma ba'daha, wa a'udhu bika min sharri ma fi hadhihil-laylati wa sharri ma ba'daha. Rabbi a'udhu bika minal-kasali wa su'il-kibar, rabbi a'udhu bika min 'adhabin fin-nari wa 'adhabin fil-qabr",
     translation: "We have entered the evening and at this very time all sovereignty belongs to Allah, and all praise is for Allah. There is no deity but Allah, alone without partner; His is the sovereignty and His is the praise, and He has power over all things. My Lord, I ask You for the good of this night and the good of what follows it, and I seek refuge in You from the evil of this night and the evil of what follows it. My Lord, I seek refuge in You from laziness and the hardships of old age. My Lord, I seek refuge in You from torment in the Fire and torment in the grave.",
@@ -402,15 +429,15 @@ window.DG_CONTENT = {
   rarityOrder: ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Exotic", "Mythic", "Diamond"],
 
   practiceDhikr: [
-    { id: "subhanallah", arabic: "سُبْحَانَ اللهِ", transliteration: "subhanallah", translation: "Glory be to Allah", target: 33, virtue: "Part of the four most beloved words to Allah.", flower: { name: "Sunflower", emoji: "🌻", rarity: "Common" }, stage: 1 },
-    { id: "alhamdulillah", arabic: "الْحَمْدُ لِلَّهِ", transliteration: "alhamdulillah", translation: "All praise is due to Allah", target: 33, virtue: "Part of the four most beloved words to Allah.", flower: { name: "Rose", emoji: "🌹", rarity: "Common" }, stage: 1 },
-    { id: "allahu-akbar", arabic: "اللهُ أَكْبَرُ", transliteration: "Allahu akbar", translation: "Allah is the Greatest", target: 34, virtue: "Part of the four most beloved words to Allah.", flower: { name: "Tulip", emoji: "🌷", rarity: "Common" }, stage: 1 },
+    { id: "subhanallah", arabic: "سُبْحَانَ اللهِ", transliteration: "subhanallah", translation: "Glory be to Allah", target: 33, virtue: "Part of the four most accepted words to Allah.", flower: { name: "Sunflower", emoji: "🌻", rarity: "Common" }, stage: 1 },
+    { id: "alhamdulillah", arabic: "الْحَمْدُ لِلَّهِ", transliteration: "alhamdulillah", translation: "All praise is due to Allah", target: 33, virtue: "Part of the four most accepted words to Allah.", flower: { name: "Rose", emoji: "🌹", rarity: "Common" }, stage: 1 },
+    { id: "allahu-akbar", arabic: "اللهُ أَكْبَرُ", transliteration: "Allahu akbar", translation: "Allah is the Greatest", target: 34, virtue: "Part of the four most accepted words to Allah.", flower: { name: "Tulip", emoji: "🌷", rarity: "Common" }, stage: 1 },
     { id: "astaghfirullah", arabic: "أَسْتَغْفِرُ اللهَ", transliteration: "Astaghfirullah", translation: "I seek Allah's forgiveness", target: 100, virtue: "The Prophet ﷺ sought Allah's forgiveness 100 times a day. Including others (e.g. one's parents) multiplies the reward.", flower: { name: "Daisy", emoji: "🌼", rarity: "Uncommon" }, stage: 2 },
     { id: "hasbunallah", arabic: "حَسْبُنَا اللهُ وَنِعْمَ الْوَكِيلُ", transliteration: "Hasbunallahu wa ni'mal wakeel", translation: "Allah is sufficient for us, and He is the best Disposer of affairs", target: 33, virtue: "The saying of the believers in times of hardship (Qur'an 3:173).", flower: { name: "Golden Wheat", emoji: "🌾", rarity: "Uncommon" }, stage: 2 },
-    { id: "tahlil", arabic: "لَا إِلَهَ إِلَّا اللهُ", transliteration: "La ilaha illa Allah", translation: "There is no deity but Allah", target: 100, virtue: "The best dhikr; the best of the four most beloved words.", flower: { name: "Cherry Blossom", emoji: "🌸", rarity: "Rare" }, stage: 3 },
+    { id: "tahlil", arabic: "لَا إِلَهَ إِلَّا اللهُ", transliteration: "La ilaha illa Allah", translation: "There is no deity but Allah", target: 100, virtue: "The best dhikr; the best of the four most accepted words.", flower: { name: "Cherry Blossom", emoji: "🌸", rarity: "Rare" }, stage: 3 },
     { id: "salawat", arabic: "اللَّهُمَّ صَلِّ عَلَى مُحَمَّدٍ", transliteration: "Allahumma salli 'ala Muhammad", translation: "O Allah, send blessings upon Muhammad", target: 100, virtue: "Whoever sends one blessing upon the Prophet ﷺ, Allah sends ten upon him.", flower: { name: "Hibiscus", emoji: "🌺", rarity: "Rare" }, stage: 3 },
-    { id: "subhanallahi-wa-bihamdihi", arabic: "سُبْحَانَ اللهِ وَبِحَمْدِهِ", transliteration: "SubhanAllahi wa bihamdihi", translation: "Glory be to Allah and praise Him", target: 100, virtue: "Whoever says it 100 times, a palm tree is planted for him in Paradise — and his sins are forgiven even if like the foam of the sea.", flower: { name: "Lotus", emoji: "🪷", rarity: "Epic" }, stage: 4 },
-    { id: "subhanallahil-azim", arabic: "سُبْحَانَ اللهِ الْعَظِيمِ", transliteration: "SubhanAllahil-Azim", translation: "Glory be to Allah, the Magnificent", target: 100, virtue: "Two phrases light on the tongue, heavy on the Scale, beloved to the Most Merciful.", flower: { name: "Moonlight Blossom", emoji: "💮", rarity: "Epic" }, stage: 4 },
+    { id: "subhanallahi-wa-bihamdihi", arabic: "سُبْحَانَ اللهِ وَبِحَمْدِهِ", transliteration: "subhanallah wa bihamdihi", translation: "Glory be to Allah and praise Him", target: 100, virtue: "Whoever says it 100 times, a palm tree is planted for him in Paradise — and his sins are forgiven even if like the foam of the sea.", flower: { name: "Lotus", emoji: "🪷", rarity: "Epic" }, stage: 4 },
+    { id: "subhanallahil-azim", arabic: "سُبْحَانَ اللهِ الْعَظِيمِ", transliteration: "subhanallahil-azim", translation: "Glory be to Allah, the Magnificent", target: 100, virtue: "Two phrases light on the tongue, heavy on the Scale, most accepted to the Most Merciful.", flower: { name: "Moonlight Blossom", emoji: "💮", rarity: "Epic" }, stage: 4 },
     { id: "la-hawla", arabic: "لَا حَوْلَ وَلَا قُوَّةَ إِلَّا بِاللهِ", transliteration: "La hawla wa la quwwata illa billah", translation: "There is no power nor strength except with Allah", target: 100, virtue: "A treasure from the treasures of Paradise.", flower: { name: "Starlight Bloom", emoji: "🌟", rarity: "Legendary" }, stage: 5 }
   ],
 
@@ -424,7 +451,7 @@ window.DG_CONTENT = {
 
   dailyRhythm: {
     morning: DG_MORNING_ONLY.concat(DG_SHARED),
-    evening: DG_MORNING_ONLY.concat(DG_SHARED, DG_EVENING_ONLY)
+    evening: DG_EVENING_ONLY.concat(DG_MORNING_ONLY.slice(1), DG_SHARED)
   },
 
   milestones: {
@@ -585,47 +612,19 @@ window.DG_CONTENT = {
       body: "Scholars measure stillness in prayer by the time it takes to say 'subhanallah' once — let each utterance be unhurried."
     },
     {
-      id: "eid-takbir",
-      title: "The Eid takbir",
-      body: "Full Eid takbir text with meanings: 'Allahu akbaru kabira, wal-hamdu lillahi kathira, wa subhanallahi wa bihamdihi bukrataw wa asila' — Allah is Great; all praise is due to Allah; glory be to Allah and praise Him morning and evening."
-    },
-    {
-      id: "iftar-bedtime",
-      title: "Iftar and bedtime remembrances",
-      body: "At iftar: 'Allahumma laka sumtu wa 'ala rizqika aftartu' (اللَّهُمَّ لَكَ صُمْتُ وَعَلَى رِزْقِكَ أَفْطَرْتُ) — O Allah, for You I fasted and with Your provision I break my fast; then: 'dhahabadh-dhama'u wabtallatil-'uruqu wathabatal-ajru in sha' Allah' (ذَهَبَ الظَّمَأُ وَابْتَلَّتِ الْعُرُوقُ وَثَبَتَ الْأَجْرُ إِنْ شَاءَ اللهُ) — thirst is gone, the veins are moistened, and the reward is assured, if Allah wills. Before sleep: 'Allahumma bismika amutu wa ahya' (اللَّهُمَّ بِاسْمِكَ أَمُوتُ وَأَحْيَا) — O Allah, by Your name I die and I live."
+      id: "bedtime",
+      title: "Bedtime remembrance",
+      body: "Before sleep: 'Allahumma bismika amutu wa ahya' (اللَّهُمَّ بِاسْمِكَ أَمُوتُ وَأَحْيَا) — O Allah, by Your name I die and I live."
     }
   ],
 
   seasons: [
-    {
-      id: "ramadan",
-      name: "Ramadan",
-      hijriMonth: 9,
-      description: "The month of fasting; the garden glows at night.",
-      theme: { sky1: "#0b1d3a", sky2: "#1c2f55", accent: "#f5c86b" }
-    },
-    {
-      id: "eid-fitr",
-      name: "Eid al-Fitr",
-      hijriMonth: 10,
-      hijriDay: 1,
-      description: "The festival of breaking the fast; the garden celebrates.",
-      theme: { sky1: "#eaf7ff", sky2: "#fff3d6", accent: "#f2b632" }
-    },
     {
       id: "dhul-hijjah",
       name: "Dhul-Hijjah",
       hijriMonth: 12,
       description: "The ten best days; the garden is at its most radiant.",
       theme: { sky1: "#1a1033", sky2: "#3b1f5e", accent: "#ffd166" }
-    },
-    {
-      id: "eid-adha",
-      name: "Eid al-Adha",
-      hijriMonth: 12,
-      hijriDay: 10,
-      description: "The festival of sacrifice; the garden shines in warm gold.",
-      theme: { sky1: "#fdf0e6", sky2: "#ffe3c2", accent: "#e07b39" }
     },
     {
       id: "muharram",
