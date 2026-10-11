@@ -3080,6 +3080,7 @@ function flipStep(G, dt) {
   for (i = 0; i < G.floors.length; i++) G.floors[i].x -= speed * dt;
   for (i = 0; i < G.ceils.length; i++) G.ceils[i].x -= speed * dt;
   for (i = 0; i < G.obs.length; i++) G.obs[i].x -= speed * dt;
+  G.nextF -= speed * dt; G.nextC -= speed * dt; // scroll spawn cursors so the run stays endless
   var px = G.x;
   function segAt(list) {
     for (var k = 0; k < list.length; k++) {
@@ -3274,6 +3275,7 @@ function fireflyStep(G, dt) {
     a.x -= speed * dt;
     if (!a.passed && a.x + a.w < G.x) { a.passed = true; G.score++; }
   }
+  G.nextX -= speed * dt; // scroll the spawn cursor with the world so arches keep coming
   while (G.nextX < G.W + 160) {
     var gapH = Math.max(112, 178 - G.score * 1.7);
     var gy = 100 + G.rng() * (G.H - 200);
@@ -3462,7 +3464,7 @@ function startVineRun() {
   var G = {
     ctx: setup.ctx, W: setup.W, H: setup.W, N: N, cell: cell,
     rng: sproutRng(attempt * 224737 + 11),
-    snake: [{ x: 8, y: 8 }, { x: 7, y: 8 }, { x: 6, y: 8 }],
+    snake: [{ x: 4, y: 8 }, { x: 3, y: 8 }, { x: 2, y: 8 }], // left-of-center, moving right: full runway before the far wall
     dir: { x: 1, y: 0 }, queue: [], drop: null,
     score: 0, acc: 0, tick: 175, over: false, raf: 0,
     color: colorOptById(VINE_COLORS, S.vineColor).color || '#4caf50',
