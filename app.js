@@ -271,7 +271,6 @@ function baseFlower(dh) {
 }
 
 /* ---------------- SPROUT mini-game constants (defined before state: state validation uses them) ---------------- */
-var SPROUT_COST = 5; // adhkar credits per climb attempt
 var SPROUT_COSTUMES = [
   { id: 'sproutling', name: 'Sproutling', emoji: '🌱', at: 0 },
   { id: 'bloom-rider', name: 'Bloom Rider', emoji: '🌸', at: 250 },
@@ -291,6 +290,332 @@ function sproutRng(seed) {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/* ---------------- v11 migration: checklist/credit keys index -> item id ----------------
+   v10 stored daily checklist + credit awards by numeric index; two items were
+   removed in v11, shifting indexes. Convert old numeric keys to item ids once. */
+var OLD_MORNING_IDS = ["bika-asbahna", "ayat-al-kursi", "la-ilaha-wahdahu", "a-udhu-bikalimatillah",
+  "sayyid-istighfar", "alim-al-ghayb", "ushhiduk", "muawwidhat-ikhlas", "muawwidhat-falaq",
+  "muawwidhat-nas", "bismillahil-ladhi", "dua-al-hamm", "hasbiyallah", "mann-shahida",
+  "raditu-billahi", "subhanallahi-wa-bihamdihi-am", "ya-hayyu-ya-qayyum"];
+var OLD_EVENING_IDS = ["bika-amsayna", "amsayna", "ayat-al-kursi", "la-ilaha-wahdahu",
+  "a-udhu-bikalimatillah", "sayyid-istighfar", "alim-al-ghayb", "ushhiduk", "muawwidhat-ikhlas",
+  "muawwidhat-falaq", "muawwidhat-nas", "bismillahil-ladhi", "dua-al-hamm", "hasbiyallah",
+  "mann-shahida", "raditu-billahi", "subhanallahi-wa-bihamdihi-am", "ya-hayyu-ya-qayyum"];
+
+function newDailyIds(period) {
+  var d = getDaily();
+  var list = period === 'morning' ? d.morning : d.evening;
+  var out = {};
+  for (var i = 0; i < list.length; i++) if (list[i] && list[i].id) out[list[i].id] = true;
+  return out;
+}
+function migrateChecklistKeys() {
+  if (safeGet('dg_migrated_v11', false)) return;
+  try {
+    var periods = ['morning', 'evening'];
+    var oldLists = { morning: OLD_MORNING_IDS, evening: OLD_EVENING_IDS };
+    for (var p = 0; p < periods.length; p++) {
+      (function (period) {
+        var valid = newDailyIds(period);
+        var oldArr = oldLists[period];
+        [['checklist', S.checklist], ['creditAwards', S.creditAwards]].forEach(function (pair) {
+          var store = pair[1];
+          if (!store || typeof store !== 'object') return;
+          Object.keys(store).forEach(function (day) {
+            var rec = store[day] && store[day][period];
+            if (!rec || typeof rec !== 'object') return;
+            var next = {};
+            Object.keys(rec).forEach(function (k) {
+              var id = /^\d+$/.test(k) ? oldArr[Number(k)] : k;
+              if (id && valid[id]) next[id] = rec[k];
+            });
+            store[day][period] = next;
+          });
+        });
+      })(periods[p]);
+    }
+    saveState();
+  } catch (e) { /* migration must never break boot */ }
+  safeSet('dg_migrated_v11', true);
+}
+
+/* ---------------- ADHKAR ARCADE constants ---------------- */
+var GAME_COST = 5;
+var ARCADE_GAMES = [
+  { id: 'sprout', name: 'Sprout Climb', emoji: '🌱', tag: 'Bounce as high as you can' },
+  { id: 'flip', name: 'Flip Runner', emoji: '🌀', tag: 'Flip gravity, dodge the gaps' },
+  { id: 'firefly', name: 'Firefly Flight', emoji: '✨', tag: 'Flap through the arches' },
+  { id: 'vine', name: 'Vine Snake', emoji: '🌿', tag: 'Grow without tangling' }
+];
+function arcadeGameDef(id) {
+  for (var i = 0; i < ARCADE_GAMES.length; i++) if (ARCADE_GAMES[i].id === id) return ARCADE_GAMES[i];
+  return ARCADE_GAMES[0];
+}
+function arcadeHigh(game) {
+  return Math.floor(Number((S.arcadeHigh || {})[game]) || 0);
+}
+function setArcadeHigh(game, v) {
+  if (!S.arcadeHigh || typeof S.arcadeHigh !== 'object') S.arcadeHigh = {};
+  v = Math.floor(Number(v) || 0);
+  if (v > arcadeHigh(game)) { S.arcadeHigh[game] = v; saveState(); return true; }
+  return false;
+}
+function bumpArcadeAttempts(game) {
+  if (!S.arcadeAttempts || typeof S.arcadeAttempts !== 'object') S.arcadeAttempts = {};
+  S.arcadeAttempts[game] = (Number(S.arcadeAttempts[game]) || 0) + 1;
+  saveState();
+  return S.arcadeAttempts[game];
+}
+/* extended Sprout costumes (distance milestones) */
+SPROUT_COSTUMES.push(
+  { id: 'sky-sprinter', name: 'Sky Sprinter', emoji: '🌤️', at: 2500 },
+  { id: 'cloud-dancer', name: 'Cloud Dancer', emoji: '☁️', at: 4000 },
+  { id: 'star-voyager', name: 'Star Voyager', emoji: '🌠', at: 6000 }
+);
+/* Flip Runner customization: shirt / shoes / hat, unlocked every 1000m of best distance */
+var FLIP_SHIRTS = [
+  { id: 'fs-white', name: 'White Tee', color: '#f4efe3', at: 0 },
+  { id: 'fs-garden', name: 'Garden Tee', color: '#4caf50', at: 1000 },
+  { id: 'fs-gold', name: 'Gold Tee', color: '#e3a93c', at: 2000 },
+  { id: 'fs-sky', name: 'Sky Tee', color: '#7fb5e8', at: 3000 },
+  { id: 'fs-rose', name: 'Rose Tee', color: '#e08ac0', at: 4000 }
+];
+var FLIP_SHOES = [
+  { id: 'fsh-trail', name: 'Trail Shoes', color: '#8a6a4a', at: 0 },
+  { id: 'fsh-ember', name: 'Ember Runners', color: '#d9534f', at: 1000 },
+  { id: 'fsh-river', name: 'River Runners', color: '#4f7ed9', at: 2000 },
+  { id: 'fsh-champ', name: 'Champion Kicks', color: '#e3a93c', at: 3000 },
+  { id: 'fsh-mint', name: 'Mint Dashers', color: '#7be0b8', at: 4000 }
+];
+var FLIP_HATS = [
+  { id: 'fh-none', name: 'No Hat', color: null, at: 0 },
+  { id: 'fh-greencap', name: 'Green Cap', color: '#4caf50', at: 1000 },
+  { id: 'fh-goldcap', name: 'Gold Cap', color: '#e3a93c', at: 2000 },
+  { id: 'fh-nightcap', name: 'Night Cap', color: '#2b3a55', at: 3000 },
+  { id: 'fh-crown', name: 'Runner Crown', color: '#ffd700', at: 4000 }
+];
+function flipOptById(list, id) {
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return list[0];
+}
+/* newly unlocked customization items: deterministic from old vs new best — no state needed */
+function newlyUnlocked(list, oldBest, newBest) {
+  var out = [];
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].at > oldBest && list[i].at <= newBest) out.push(list[i]);
+  }
+  return out;
+}
+function unlockedOpts(list, best) {
+  var out = [];
+  for (var i = 0; i < list.length; i++) if (best >= list[i].at) out.push(list[i]);
+  return out;
+}
+/* Firefly glow colors + vine colors, unlocked at score milestones */
+var FIREFLY_GLOWS = [
+  { id: 'fg-gold', name: 'Golden Glow', color: '#ffd94d', at: 0 },
+  { id: 'fg-mint', name: 'Mint Glow', color: '#7be0b8', at: 10 },
+  { id: 'fg-sky', name: 'Sky Glow', color: '#7fb5e8', at: 25 },
+  { id: 'fg-rose', name: 'Rose Glow', color: '#ff9ecf', at: 50 },
+  { id: 'fg-violet', name: 'Violet Glow', color: '#c49eff', at: 100 }
+];
+var VINE_COLORS = [
+  { id: 'vc-green', name: 'Garden Vine', color: '#4caf50', at: 0 },
+  { id: 'vc-deep', name: 'Deep Jungle', color: '#1f7a3a', at: 10 },
+  { id: 'vc-gold', name: 'Golden Vine', color: '#c9a227', at: 25 },
+  { id: 'vc-teal', name: 'Teal Vine', color: '#2fa39a', at: 50 },
+  { id: 'vc-plum', name: 'Plum Vine', color: '#8e4a8e', at: 100 }
+];
+function colorOptById(list, id) {
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
+  return list[0];
+}
+
+/* ---------------- per-item recitation audio (listen-in-full gate) ----------------
+   Audio elements are created lazily via `new Audio()` (never preloaded) and live
+   outside the DOM, so checklist re-renders never disturb playback. */
+var audioEls = {}; // itemId -> HTMLAudioElement
+function audioUrlFor(id) {
+  var m = (D.audioMap && typeof D.audioMap === 'object') ? D.audioMap : {};
+  return m[id] || null;
+}
+function audioListened(id) { return !!(S.audioListened && S.audioListened[id]); }
+function needsListen(id) { return !!audioUrlFor(id) && !audioListened(id); }
+function markAudioListened(id) {
+  if (!S.audioListened || typeof S.audioListened !== 'object') S.audioListened = {};
+  if (S.audioListened[id]) return;
+  S.audioListened[id] = 1;
+  safeSet('dg_audio_listened', S.audioListened);
+}
+function stopOtherAudio(exceptId) {
+  Object.keys(audioEls).forEach(function (id) {
+    if (id === exceptId) return;
+    try { audioEls[id].pause(); } catch (e) {}
+  });
+}
+function stopAllAudio() {
+  Object.keys(audioEls).forEach(function (id) {
+    try { audioEls[id].pause(); } catch (e) {}
+  });
+}
+/* refresh one row's audio UI (play label, progress, lock state) — queries DOM fresh */
+function syncAudioRow(id) {
+  var row = document.querySelector('.check-row[data-item="' + id + '"]');
+  if (!row) return;
+  var a = audioEls[id];
+  var playing = !!(a && !a.paused && !a.ended);
+  var listened = audioListened(id);
+  var btn = row.querySelector('[data-audio-play]');
+  if (btn && !btn.disabled) btn.innerHTML = playing ? '⏸ Pause' : (listened || (a && a.currentTime > 0) ? '▶ Replay' : '▶ Recitation');
+  var prog = row.querySelector('[data-audio-prog]');
+  if (prog && a && a.duration) prog.style.width = Math.min(100, (a.currentTime / a.duration) * 100).toFixed(1) + '%';
+  else if (prog && listened) prog.style.width = '100%';
+  var badge = row.querySelector('[data-audio-done]');
+  if (badge) badge.hidden = !listened;
+  var lockNote = row.querySelector('[data-audio-lock]');
+  if (lockNote) lockNote.hidden = !needsListen(id);
+}
+function getAudioEl(id) {
+  if (audioEls[id]) return audioEls[id];
+  var url = audioUrlFor(id);
+  if (!url) return null;
+  var a = new Audio();
+  a.preload = 'none';
+  a.src = url; // set only on first tap — clips are never preloaded
+  a.addEventListener('ended', function () {
+    markAudioListened(id);
+    syncAudioRow(id);
+    toast('MashaAllah — recitation complete 🤲');
+  });
+  a.addEventListener('pause', function () {
+    // pausing restarts the recitation from the beginning
+    if (!a.ended) { try { a.currentTime = 0; } catch (e) {} }
+    syncAudioRow(id);
+  });
+  a.addEventListener('timeupdate', function () { syncAudioRow(id); });
+  a.addEventListener('play', function () { stopOtherAudio(id); syncAudioRow(id); });
+  a.addEventListener('error', function () { toast('Audio could not play. Try again.'); syncAudioRow(id); });
+  audioEls[id] = a;
+  return a;
+}
+function toggleAudio(id) {
+  var a = getAudioEl(id);
+  if (!a) return;
+  if (a.paused) {
+    stopOtherAudio(id);
+    try {
+      var pr = a.play();
+      if (pr && pr.catch) pr.catch(function () { toast('Audio could not play. Try again.'); });
+    } catch (e) { toast('Audio could not play. Try again.'); }
+  } else {
+    a.pause(); // pause handler resets to the beginning
+  }
+  syncAudioRow(id);
+}
+
+/* ---------------- rhythm levels ---------------- */
+function getRhythmLevels() {
+  var a = Array.isArray(D.rhythmLevels) ? D.rhythmLevels : [];
+  return a.filter(function (x) { return x && x.id && x.name; });
+}
+function rhythmLevelDef() {
+  var ls = getRhythmLevels();
+  for (var i = 0; i < ls.length; i++) if (ls[i].id === S.rhythmLevel) return ls[i];
+  for (var j = 0; j < ls.length; j++) if (ls[j].id === 'expert') return ls[j];
+  return { id: 'expert', name: 'Expert', creditMult: 3, itemIds: null };
+}
+function levelItemIds() {
+  var def = rhythmLevelDef();
+  return def.itemIds || null; // null = full checklist
+}
+function inLevel(itemId) {
+  var ids = levelItemIds();
+  return ids === null || ids.indexOf(itemId) !== -1;
+}
+function findDailyItem(period, id) {
+  var d = getDaily();
+  var list = period === 'morning' ? d.morning : d.evening;
+  for (var i = 0; i < list.length; i++) if (list[i] && list[i].id === id) return list[i];
+  return null;
+}
+
+/* ---------------- prayer time-gating (Aladhan API, cached per day) ----------------
+   Morning is completable Fajr -> Maghrib; Evening Maghrib -> next Fajr.
+   Without a granted location both lists stay accessible with a setup prompt. */
+var RHYTHM_TIMES = null; // {fajr: Date, maghrib: Date}
+var rhythmTimesStamp = '';
+function parseAladhanTime(s) {
+  var m = /^(\d{1,2}):(\d{2})/.exec(String(s || ''));
+  if (!m) return null;
+  var d = new Date();
+  d.setHours(Number(m[1]), Number(m[2]), 0, 0);
+  return d;
+}
+function ensureRhythmTimes(cb) {
+  var today = todayKey();
+  if (rhythmTimesStamp === today && RHYTHM_TIMES) return; // already loaded today
+  function finish() {
+    rhythmTimesStamp = today;
+    if (typeof cb === 'function') cb();
+  }
+  var loc = S.location;
+  if (!(loc && loc.granted && typeof loc.lat === 'number')) { RHYTHM_TIMES = null; return; }
+  var cache = S.prayerCache;
+  if (cache && cache.date === today && cache.fajr && cache.maghrib &&
+      cache.lat === loc.lat && cache.lon === loc.lon) {
+    RHYTHM_TIMES = { fajr: new Date(cache.fajr), maghrib: new Date(cache.maghrib) };
+    rhythmTimesStamp = today;
+    return; // cache hit: no re-render needed
+  }
+  function useLocal() {
+    try {
+      var pt = computePrayerTimes(new Date(), loc.lat, loc.lon);
+      if (pt && pt.fajr && pt.maghrib) {
+        RHYTHM_TIMES = { fajr: pt.fajr, maghrib: pt.maghrib };
+        S.prayerCache = { date: today, lat: loc.lat, lon: loc.lon,
+          fajr: pt.fajr.toISOString(), maghrib: pt.maghrib.toISOString(), local: true };
+        safeSet('dg_prayer_cache', S.prayerCache);
+      } else { RHYTHM_TIMES = null; }
+    } catch (e) { RHYTHM_TIMES = null; }
+    finish();
+  }
+  var dd = pad2(new Date().getDate()) + '-' + pad2(new Date().getMonth() + 1) + '-' + new Date().getFullYear();
+  var url = 'https://api.aladhan.com/v1/timings/' + dd + '?latitude=' + loc.lat + '&longitude=' + loc.lon + '&method=2';
+  try {
+    fetch(url).then(function (r) { return r.json(); }).then(function (j) {
+      var t = j && j.data && j.data.timings;
+      if (t && t.Fajr && t.Maghrib) {
+        var f = parseAladhanTime(t.Fajr), m = parseAladhanTime(t.Maghrib);
+        if (f && m) {
+          RHYTHM_TIMES = { fajr: f, maghrib: m };
+          S.prayerCache = { date: today, lat: loc.lat, lon: loc.lon, fajr: f.toISOString(), maghrib: m.toISOString() };
+          safeSet('dg_prayer_cache', S.prayerCache);
+          finish();
+          return;
+        }
+      }
+      useLocal();
+    }).catch(useLocal);
+  } catch (e) { useLocal(); }
+}
+function rhythmWindow() {
+  var now = new Date();
+  if (!(S.location && S.location.granted) || !RHYTHM_TIMES || !RHYTHM_TIMES.fajr || !RHYTHM_TIMES.maghrib) {
+    return { morningOpen: true, eveningOpen: true, gated: false, nextUnlock: null };
+  }
+  var fajr = RHYTHM_TIMES.fajr.getTime(), maghrib = RHYTHM_TIMES.maghrib.getTime(), t = now.getTime();
+  var morningOpen = t >= fajr && t < maghrib;
+  var next;
+  if (morningOpen) {
+    next = { prayer: 'Maghrib', at: new Date(maghrib), forPeriod: 'evening' };
+  } else {
+    var nf = new Date(fajr);
+    if (t >= fajr) nf.setDate(nf.getDate() + 1); // after Fajr but before Maghrib is impossible here; this covers t < fajr (evening window)
+    next = { prayer: 'Fajr', at: nf, forPeriod: 'morning' };
+  }
+  return { morningOpen: morningOpen, eveningOpen: !morningOpen, gated: true, nextUnlock: next };
 }
 
 /* ---------------- state (all under dg_ keys, all safe) ---------------- */
@@ -313,10 +638,22 @@ var S = {
   replantChoice: safeGet('dg_replant_choice', null), // selected awardKey for the General counter re-plant card
   credits: (function () { var c = safeGet('dg_credits', 0); return (typeof c === 'number' && c >= 0) ? Math.floor(c) : 0; })(),
   creditAwards: safeGet('dg_credit_awards', {}),     // {"YYYY-MM-DD": {"morning": {idx:credits}, "evening": {idx:credits}}}
-  sproutHigh: (function () { var h = safeGet('dg_sprout_high', 0); return (typeof h === 'number' && h >= 0) ? Math.floor(h) : 0; })(),
   sproutCostumes: safeGet('dg_sprout_costumes', ['sproutling']), // unlocked costume ids
   sproutEquipped: safeGet('dg_sprout_equipped', 'sproutling'),
-  sproutAttempts: (function () { var a = safeGet('dg_sprout_attempts', 0); return (typeof a === 'number' && a >= 0) ? Math.floor(a) : 0; })()
+  arcadeHigh: (function () { // per-game bests {sprout,flip,firefly,vine}; migrates v10 dg_sprout_high
+    var h = safeGet('dg_arcade_high', null);
+    if (!h || typeof h !== 'object' || Array.isArray(h)) h = {};
+    var old = safeGet('dg_sprout_high', 0);
+    if (!(typeof h.sprout === 'number' && h.sprout >= 0) && typeof old === 'number' && old > 0) h.sprout = Math.floor(old);
+    return h;
+  })(),
+  arcadeAttempts: safeGet('dg_arcade_attempts', {}), // per-game attempt counts
+  flipCustom: safeGet('dg_flip_custom', null),       // {shirt,shoes,hat} ids
+  fireflyGlow: safeGet('dg_firefly_glow', 'fg-gold'),
+  vineColor: safeGet('dg_vine_color', 'vc-green'),
+  rhythmLevel: safeGet('dg_rhythm_level', 'expert'), // checklist level id
+  audioListened: safeGet('dg_audio_listened', {}),   // {itemId:true} — permanent per-device unlock
+  prayerCache: safeGet('dg_prayer_cache', null)      // {date,lat,lon,fajr,maghrib} ISO strings
 };
 if (typeof S.sessions !== 'number') S.sessions = 0;
 if (typeof S.lifetime !== 'number') S.lifetime = 0;
@@ -329,6 +666,11 @@ if (!S.replants || typeof S.replants !== 'object' || Array.isArray(S.replants)) 
 if (!S.creditAwards || typeof S.creditAwards !== 'object' || Array.isArray(S.creditAwards)) S.creditAwards = {};
 if (!Array.isArray(S.sproutCostumes) || !S.sproutCostumes.length) S.sproutCostumes = ['sproutling'];
 if (SPROUT_COSTUMES.map(function (c) { return c.id; }).indexOf(S.sproutEquipped) === -1) S.sproutEquipped = 'sproutling';
+if (!S.arcadeHigh || typeof S.arcadeHigh !== 'object' || Array.isArray(S.arcadeHigh)) S.arcadeHigh = {};
+if (!S.arcadeAttempts || typeof S.arcadeAttempts !== 'object' || Array.isArray(S.arcadeAttempts)) S.arcadeAttempts = {};
+if (!S.flipCustom || typeof S.flipCustom !== 'object') S.flipCustom = { shirt: 'fs-white', shoes: 'fsh-brown', hat: 'fh-none' };
+if (['beginner', 'beginner-na', 'intermediate', 'expert'].indexOf(S.rhythmLevel) === -1) S.rhythmLevel = 'expert';
+if (!S.audioListened || typeof S.audioListened !== 'object' || Array.isArray(S.audioListened)) S.audioListened = {};
 
 function saveState() {
   safeSet('dg_totals', S.totals);
@@ -348,10 +690,16 @@ function saveState() {
   safeSet('dg_replant_choice', S.replantChoice);
   safeSet('dg_credits', S.credits);
   safeSet('dg_credit_awards', S.creditAwards);
-  safeSet('dg_sprout_high', S.sproutHigh);
   safeSet('dg_sprout_costumes', S.sproutCostumes);
   safeSet('dg_sprout_equipped', S.sproutEquipped);
-  safeSet('dg_sprout_attempts', S.sproutAttempts);
+  safeSet('dg_arcade_high', S.arcadeHigh);
+  safeSet('dg_arcade_attempts', S.arcadeAttempts);
+  safeSet('dg_flip_custom', S.flipCustom);
+  safeSet('dg_firefly_glow', S.fireflyGlow);
+  safeSet('dg_vine_color', S.vineColor);
+  safeSet('dg_rhythm_level', S.rhythmLevel);
+  safeSet('dg_audio_listened', S.audioListened);
+  safeSet('dg_prayer_cache', S.prayerCache);
 }
 
 /* ---------------- prayer times: Muslim World League solar math ----------------
@@ -857,7 +1205,7 @@ var currentScreen = 'home';
 
 function showScreen(name) {
   if (SCREENS.indexOf(name) === -1) name = 'home';
-  try { stopSprout(); } catch (e) { /* game loop never blocks navigation */ }
+  try { stopArcade(); stopAllAudio(); } catch (e) { /* game loop never blocks navigation */ }
   currentScreen = name;
   for (var i = 0; i < SCREENS.length; i++) {
     var sec = el('screen-' + SCREENS[i]);
@@ -1091,11 +1439,11 @@ function sectionGrid() {
   var items = [
     ['practice', 'Practice', 'Count a dhikr', '#7bc496'],
     ['daily', 'Daily rhythm', 'Morning & evening', '#f0a05a'],
-    ['learn', 'Learning path', practiced + '/' + list.length + ' practiced', '#7fb5e8'],
+    ['learn', 'Learn', getLearnArticles().length + ' articles', '#7fb5e8'],
     ['herbarium', T('collection', 'Herbarium'), herbProg.known + '/' + herbProg.total + ' discovered', '#e08ac0'],
     ['articles', 'Articles', getArticles().length + ' pages', '#f0a05a'],
     ['progress', 'Progress', fmtNum(S.lifetime) + ' lifetime', '#7fb5e8'],
-    ['game', 'Sprout climb', 'Mini-game · ' + fmtNum(S.credits) + ' credits', '#9fe0b8']
+    ['game', 'Adhkar Arcade', '4 games · ' + fmtNum(S.credits) + ' coins', '#9fe0b8']
   ];
   var html = '<span class="kicker k-sage">Explore</span><h2 class="giant-sm">Open a section</h2><div class="sec-grid">';
   for (i = 0; i < items.length; i++) {
@@ -1142,7 +1490,7 @@ function dailyPreview() {
   var day = checklistDay();
   function doneCount(items, rec) {
     var n = 0;
-    for (var i = 0; i < items.length; i++) { if (rec && rec[i]) n++; }
+    for (var i = 0; i < items.length; i++) { if (items[i] && items[i].id && rec && rec[items[i].id]) n++; }
     return n;
   }
   var mDone = doneCount(mItems, day.morning), eDone = doneCount(eItems, day.evening);
@@ -1154,7 +1502,7 @@ function dailyPreview() {
   var shown = mItems.slice(0, 2);
   for (var i = 0; i < shown.length; i++) {
     var it = shown[i] || {};
-    var checked = !!(day.morning && day.morning[i]);
+    var checked = !!(it.id && day.morning && day.morning[it.id]);
     html += '<div class="check-row' + (checked ? ' done' : '') + '" data-goto-daily="morning" style="cursor:pointer">' +
       '<span class="bigcheck" style="display:block;' + (checked ? 'background:var(--gold);border-color:var(--gold)' : '') + '">' +
       (checked ? '<span style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--gold-ink);font-size:1.8rem;font-weight:900">✓</span>' : '') + '</span>' +
@@ -1270,12 +1618,14 @@ function renderHome() {
 }
 
 /* ---------------- location: asked ONCE ---------------- */
-function requestLocation() {
+function requestLocation(after) {
   function done(loc) {
     S.location = loc;
     saveState();
     refreshPrayers(); applyAmbience();
-    renderHome();
+    rhythmTimesStamp = ''; RHYTHM_TIMES = null; // refetch prayer times with new coords
+    if (after === 'daily') { ensureRhythmTimes(function () { renderDaily(); }); renderDaily(); }
+    else renderHome();
   }
   if (!('geolocation' in navigator)) { done({ granted: false }); return; }
   try {
@@ -1613,21 +1963,23 @@ function checklistDay() {
 }
 
 /* ---------------- adhkar credit wallet ----------------
-   Each checklist item awards 1-4 credits once per day per period.
-   Unchecking never revokes; rechecking never double-awards. */
+   Each checklist item awards 1-4 credits (x level multiplier) once per day
+   per period, keyed by item id. Unchecking never revokes; rechecking never
+   double-awards. */
 function itemCredits(it) {
   var c = Number(it && it.credits);
   if (!(c >= 1 && c <= 9)) c = 1;
   return Math.round(c);
 }
-function awardCredits(period, idx, it) {
+function awardCredits(period, id, it) {
   var k = todayKey();
   if (!S.creditAwards[k] || typeof S.creditAwards[k] !== 'object') S.creditAwards[k] = { morning: {}, evening: {} };
   var rec = S.creditAwards[k][period];
   if (!rec || typeof rec !== 'object') rec = S.creditAwards[k][period] = {};
-  if (rec[idx]) return 0;
-  var c = itemCredits(it);
-  rec[idx] = c;
+  if (rec[id]) return 0;
+  var mult = Number(rhythmLevelDef().creditMult) || 1;
+  var c = itemCredits(it) * mult;
+  rec[id] = c;
   S.credits = (Number(S.credits) || 0) + c;
   var keys = Object.keys(S.creditAwards).sort();
   while (keys.length > 14) { delete S.creditAwards[keys.shift()]; }
@@ -1637,17 +1989,114 @@ function awardCredits(period, idx, it) {
 function creditWalletCard(withPlay) {
   var html = '<div class="card"><div class="row-between"><div><span class="kicker k-gold">🪙 Adhkar credits</span>' +
     '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.credits) + '</div></div>' +
-    (withPlay ? '<button class="btn-gold" data-go="game">Play Sprout 🕹️</button>' : '') + '</div>' +
-    '<p class="muted" style="margin:8px 0 0">Earn credits by completing morning &amp; evening adhkar — harder ones are worth more. ' +
-    'Each climb costs ' + SPROUT_COST + ' credits.</p></div>';
+    (withPlay ? '<button class="btn-gold" data-go="game">Open arcade 🕹️</button>' : '') + '</div>' +
+    '<p class="muted" style="margin:8px 0 0">Earn credits by completing morning &amp; evening adhkar — higher levels earn more. ' +
+    'Each arcade game costs ' + GAME_COST + ' credits per attempt.</p></div>';
   return html;
+}
+
+function doneCountFor(period) {
+  var d = getDaily();
+  var list = period === 'morning' ? d.morning : d.evening;
+  var day = checklistDay();
+  var n = 0;
+  for (var i = 0; i < list.length; i++) {
+    if (list[i] && list[i].id && day[period] && day[period][list[i].id]) n++;
+  }
+  return n;
+}
+
+function minLevelFor(id) {
+  var ls = getRhythmLevels();
+  for (var i = 0; i < ls.length; i++) {
+    var ids = ls[i].itemIds;
+    if (ids === null || ids === undefined) return ls[i].name;
+    if (ids.indexOf(id) !== -1) return ls[i].name;
+  }
+  return 'Expert';
+}
+
+function dailyRowHtml(it, period, day, periodOpen) {
+  var id = it.id;
+  var checked = !!(day[period] && day[period][id]);
+  var outOfLevel = !inLevel(id);
+  var shaded = outOfLevel || !periodOpen;
+  var url = audioUrlFor(id);
+  var listened = audioListened(id);
+  var locked = !!url && !listened;
+  var html = '<div class="check-row' + (checked ? ' done' : '') + (shaded ? ' shaded' : '') +
+    '" data-item="' + esc(id) + '">' +
+    '<input type="checkbox" class="bigcheck" data-check="' + esc(id) + '"' +
+    (checked ? ' checked' : '') + (shaded ? ' disabled' : '') +
+    ' aria-label="Mark complete: ' + esc(it.transliteration || ('item ' + id)) + '">' +
+    '<div class="check-body">';
+  if (it.arabic) html += arabicBlock(it.arabic, 'arabic-mid');
+  if (it.transliteration || it.count) {
+    html += '<button class="translit-toggle" aria-expanded="false"><span>Read transliteration' +
+      (it.count ? ' &middot; &times;' + esc(it.count) : '') + '</span><span class="tt-plus">+</span></button>' +
+      '<div class="translit-body" hidden>' +
+      (it.transliteration ? '<p class="translit">' + esc(it.transliteration) + '</p>' : '') +
+      (it.count ? '<p class="muted">Repeat <b>' + esc(it.count) + '</b> times</p>' : '') + '</div>';
+  } else if (it.count) {
+    html += '<span class="check-count">&times;' + esc(it.count) + '</span>';
+  }
+  if (url && !shaded) {
+    var a = audioEls[id];
+    var playing = !!(a && !a.paused && !a.ended);
+    html += '<div class="audio-row"><button class="aplay" data-audio-play="' + esc(id) + '">' +
+      (playing ? '⏸ Pause' : (listened ? '▶ Replay' : '▶ Recitation')) + '</button>' +
+      '<div class="aprog"><i data-audio-prog="' + esc(id) + '" style="width:' + (listened ? '100' : '0') + '%"></i></div>' +
+      '<span class="alistened" data-audio-done="' + esc(id) + '"' + (listened ? '' : ' hidden') + '>✓ Listened</span></div>' +
+      '<div class="lock-note" data-audio-lock="' + esc(id) + '"' + (locked ? '' : ' hidden') + '>' +
+      '🔒 Listen to the recitation in full to unlock</div>';
+  }
+  if (outOfLevel) {
+    html += '<div class="lock-note">Part of the <b>' + esc(minLevelFor(id)) + '</b> level — switch levels above to unlock it.</div>';
+  }
+  html += '</div></div>';
+  return html;
+}
+
+/* unlocked (in-level) items first, original order preserved within each group */
+function dailyRowsHtml(period, win) {
+  var d = getDaily();
+  var items = (period === 'morning' ? d.morning : d.evening) || [];
+  var day = checklistDay();
+  var periodOpen = period === 'morning' ? win.morningOpen : win.eveningOpen;
+  var inL = [], outL = [], i;
+  for (i = 0; i < items.length; i++) {
+    var it = items[i] || {};
+    if (!it.id) continue;
+    (inLevel(it.id) ? inL : outL).push(it);
+  }
+  var ordered = inL.concat(outL);
+  var html = '';
+  for (i = 0; i < ordered.length; i++) html += dailyRowHtml(ordered[i], period, day, periodOpen);
+  return html;
+}
+
+function refreshDailyCounts() {
+  var d = getDaily();
+  var mLen = (d.morning || []).length, eLen = (d.evening || []).length;
+  var mDone = doneCountFor('morning'), eDone = doneCountFor('evening');
+  var tm = document.querySelector('[data-tabcount="morning"]');
+  var te = document.querySelector('[data-tabcount="evening"]');
+  if (tm) tm.textContent = mDone + '/' + mLen;
+  if (te) te.textContent = eDone + '/' + eLen;
+  var cur = dailyTab === 'morning' ? mDone : eDone;
+  var len = dailyTab === 'morning' ? mLen : eLen;
+  var dc = el('daily-donecount'); if (dc) dc.textContent = cur + '/' + len;
+  var sm = el('daily-summary'); if (sm) sm.textContent = cur + ' / ' + len + ' complete';
+  var pb = el('daily-pbar'); if (pb) pb.style.width = (len ? (cur / len * 100).toFixed(0) : 0) + '%';
 }
 
 function renderDaily() {
   var sec = el('screen-daily');
   if (!sec) return;
   var daily = getDaily();
-  var mItems = daily.morning || [], eItems = daily.evening || [];
+  var win = rhythmWindow();
+  var level = rhythmLevelDef();
+  var levels = getRhythmLevels();
   var html = '<button class="backlink" data-go="home">← Home</button>' +
     '<span class="kicker k-sage">Today&rsquo;s gentle rhythm</span>' +
     '<h1 class="giant">Morning &amp; evening</h1>' +
@@ -1662,77 +2111,115 @@ function renderDaily() {
 
   html += creditWalletCard(true);
 
-  var items = dailyTab === 'morning' ? mItems : eItems;
-  var day = checklistDay();
-  var mDone = 0, eDone = 0, i;
-  for (i = 0; i < mItems.length; i++) { if (day.morning && day.morning[i]) mDone++; }
-  for (i = 0; i < eItems.length; i++) { if (day.evening && day.evening[i]) eDone++; }
-  var done = dailyTab === 'morning' ? mDone : eDone;
-
-  if (!items.length) {
-    html += '<div class="card"><div class="empty-note">Daily remembrances are being prepared —<br>check back soon, inshaAllah.</div></div>';
-  } else {
-    html += '<div class="card checklist-card"><span class="kicker k-sage">Today&rsquo;s checklist</span>' +
-      '<div class="check-head"><h2>' + (dailyTab === 'morning' ? 'Morning' : 'Evening') + '</h2>' +
-      '<span class="check-done-count">' + done + '/' + items.length + '</span></div>' +
-      '<div class="tabs"><button class="tab' + (dailyTab === 'morning' ? ' active' : '') +
-      '" data-tab="morning"><span>Morning</span><b>' + mDone + '/' + mItems.length + '</b></button>' +
-      '<button class="tab' + (dailyTab === 'evening' ? ' active' : '') +
-      '" data-tab="evening"><span>Evening</span><b>' + eDone + '/' + eItems.length + '</b></button></div>' +
-      '<div id="daily-list">';
-    for (i = 0; i < items.length; i++) {
-      (function (idx, it) {
-        var checked = !!day[dailyTab][idx];
-        html += '<div class="check-row' + (checked ? ' done' : '') + '" data-idx="' + idx + '">' +
-          '<input type="checkbox" class="bigcheck" ' + (checked ? 'checked' : '') +
-          ' aria-label="Mark complete: ' + esc(it.transliteration || ('item ' + (idx + 1))) + '">' +
-          '<div class="check-body">';
-        if (it.arabic) html += arabicBlock(it.arabic, 'arabic-mid');
-        if (it.transliteration || it.count) {
-          html += '<button class="translit-toggle" aria-expanded="false"><span>Read transliteration' +
-            (it.count ? ' &middot; &times;' + esc(it.count) : '') + '</span><span class="tt-plus">+</span></button>' +
-            '<div class="translit-body" hidden>' +
-            (it.transliteration ? '<p class="translit">' + esc(it.transliteration) + '</p>' : '') +
-            (it.count ? '<p class="muted">Repeat <b>' + esc(it.count) + '</b> times</p>' : '') + '</div>';
-        } else if (it.count) {
-          html += '<span class="check-count">&times;' + esc(it.count) + '</span>';
-        }
-        html += '</div></div>';
-      })(i, items[i] || {});
+  if (levels.length) {
+    html += '<div class="card"><span class="kicker k-sage">Your level</span><div class="lvl-grid">';
+    for (var li = 0; li < levels.length; li++) {
+      var L = levels[li];
+      html += '<button class="lvl-btn' + (L.id === level.id ? ' active' : '') + '" data-level="' + esc(L.id) + '">' +
+        '<b>' + esc(L.name) + '</b><i>' + esc(L.desc || '') + '</i>' +
+        '<span class="lvl-mult">×' + (Number(L.creditMult) || 1) + ' credits</span></button>';
     }
-    html += '</div></div>';
-    html += '<div class="card" style="text-align:center"><span class="kicker k-sage">Today</span>' +
-      '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + done + ' / ' + items.length + ' complete</div>' +
-      '<div class="pbar green"><i style="width:' + (items.length ? (done / items.length * 100).toFixed(0) : 0) + '%"></i></div></div>';
+    html += '</div><p class="muted" style="margin:10px 0 0">Pick whatever level you are comfortable with — you can switch any time.</p></div>';
   }
 
-  sec.innerHTML = html;
+  if (!win.gated) {
+    if (!(S.location && S.location.granted)) {
+      html += '<div class="card gate-note"><span class="kicker k-sage">🕌 Prayer times</span>' +
+        '<p class="muted" style="margin:6px 0 10px">Share your location once so morning adhkar open at Fajr and evening adhkar at Maghrib.</p>' +
+        '<button class="btn-gold" id="daily-loc">Share location</button></div>';
+    }
+  } else if (win.nextUnlock) {
+    var nu = win.nextUnlock;
+    html += '<div class="card gate-note"><span class="kicker k-sage">🕌 Prayer times</span>' +
+      '<p class="muted" style="margin:6px 0 0">' +
+      (nu.forPeriod === 'morning' ? 'Morning' : 'Evening') + ' adhkar unlock at ' + esc(nu.prayer) +
+      ' · ' + esc(fmtClock(nu.at)) + '</p></div>';
+  }
 
+  var mDone = doneCountFor('morning'), eDone = doneCountFor('evening');
+  var mItems = daily.morning || [], eItems = daily.evening || [];
+  var cur = dailyTab === 'morning' ? mDone : eDone;
+  var items = dailyTab === 'morning' ? mItems : eItems;
+
+  html += '<div class="card checklist-card"><span class="kicker k-sage">Today&rsquo;s checklist</span>' +
+    '<div class="check-head"><h2 id="daily-head">' + (dailyTab === 'morning' ? 'Morning' : 'Evening') + '</h2>' +
+    '<span class="check-done-count" id="daily-donecount">' + cur + '/' + items.length + '</span></div>' +
+    '<div class="tabs"><button class="tab' + (dailyTab === 'morning' ? ' active' : '') +
+    '" data-tab="morning"><span>Morning</span><b data-tabcount="morning">' + mDone + '/' + mItems.length + '</b></button>' +
+    '<button class="tab' + (dailyTab === 'evening' ? ' active' : '') +
+    '" data-tab="evening"><span>Evening</span><b data-tabcount="evening">' + eDone + '/' + eItems.length + '</b></button></div>' +
+    '<div id="daily-list">' + dailyRowsHtml(dailyTab, win) + '</div></div>';
+
+  html += '<div class="card" style="text-align:center"><span class="kicker k-sage">Today</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)" id="daily-summary">' + cur + ' / ' + items.length + ' complete</div>' +
+    '<div class="pbar green"><i id="daily-pbar" style="width:' + (items.length ? (cur / items.length * 100).toFixed(0) : 0) + '%"></i></div></div>';
+
+  sec.innerHTML = html;
+  wireDaily(sec);
+  // fetch today's prayer times (Aladhan, cached) then re-render with gating
+  ensureRhythmTimes(function () { if (currentScreen === 'daily') renderDaily(); });
+}
+
+function wireDaily(sec) {
   var gos = sec.querySelectorAll('[data-go]');
   for (var g = 0; g < gos.length; g++) {
     (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[g]);
   }
+  var lvls = sec.querySelectorAll('[data-level]');
+  for (var l = 0; l < lvls.length; l++) {
+    (function (b) {
+      b.addEventListener('click', function () {
+        S.rhythmLevel = b.getAttribute('data-level');
+        safeSet('dg_rhythm_level', S.rhythmLevel);
+        stopAllAudio();
+        renderDaily();
+        toast('Level: ' + rhythmLevelDef().name + ' 🌙');
+      });
+    })(lvls[l]);
+  }
+  var dl = el('daily-loc');
+  if (dl) dl.addEventListener('click', function () { requestLocation('daily'); });
   var tabs = sec.querySelectorAll('[data-tab]');
   for (var t = 0; t < tabs.length; t++) {
-    (function (b) { b.addEventListener('click', function () { dailyTab = b.getAttribute('data-tab'); renderDaily(); }); })(tabs[t]);
+    (function (b) {
+      b.addEventListener('click', function () {
+        stopAllAudio();
+        dailyTab = b.getAttribute('data-tab');
+        renderDaily();
+      });
+    })(tabs[t]);
   }
   var rows = sec.querySelectorAll('.check-row');
   for (var r = 0; r < rows.length; r++) {
     (function (row) {
-      var idx = Number(row.getAttribute('data-idx'));
-      var box = row.querySelector('.bigcheck');
+      var id = row.getAttribute('data-item');
+      var box = row.querySelector('[data-check]');
       var tog = row.querySelector('.translit-toggle');
       var body = row.querySelector('.translit-body');
-      if (box) box.addEventListener('change', function () {
-        var d = checklistDay();
-        if (box.checked) {
-          d[dailyTab][idx] = 1;
-          var gained = awardCredits(dailyTab, idx, items[idx]);
-          if (gained > 0) toast('+' + gained + ' adhkar credits 🪙');
-        } else delete d[dailyTab][idx];
-        saveState();
-        renderDaily(); // refresh list + summary (toggle states reset — acceptable)
-      });
+      var playBtn = row.querySelector('[data-audio-play]');
+      if (box && !box.disabled) {
+        box.addEventListener('click', function (e) {
+          if (needsListen(id)) { e.preventDefault(); toast('Listen to the recitation first.'); }
+        });
+        box.addEventListener('change', function () {
+          if (needsListen(id)) { box.checked = false; return; } // safety net
+          var d = checklistDay();
+          if (box.checked) {
+            d[dailyTab][id] = 1;
+            var gained = awardCredits(dailyTab, id, findDailyItem(dailyTab, id));
+            if (gained > 0) toast('+' + gained + ' adhkar credits 🪙');
+            row.classList.add('done');
+          } else {
+            delete d[dailyTab][id];
+            row.classList.remove('done');
+          }
+          saveState();
+          refreshDailyCounts();
+        });
+      }
+      if (playBtn && !playBtn.disabled) {
+        playBtn.addEventListener('click', function () { toggleAudio(id); });
+      }
       if (tog && body) tog.addEventListener('click', function () {
         var open = body.hidden;
         body.hidden = !open;
@@ -1744,135 +2231,71 @@ function renderDaily() {
   }
 }
 
-/* ---------------- LEARN (learning path / unlock stages) ---------------- */
-/* Learn timeline: 10 phrases, flat numbered list, no stages, no locks. */
-var LEARN_ITEMS = [
-  { desc: 'Begin with tahlil', name: 'la ilaha illallah', dhikrId: 'tahlil' },
-  { desc: 'Learn takbir', name: 'Allahu akbar', dhikrId: 'allahu-akbar' },
-  { desc: 'Learn tasbih', name: 'subhanallah', dhikrId: 'subhanallah' },
-  { desc: 'Learn tahmid', name: 'alhamdulillah', dhikrId: 'alhamdulillah' },
-  { desc: 'Plant with praise', name: 'subhanallah wa bihamdihi', dhikrId: 'subhanallahi-wa-bihamdihi' },
-  { desc: 'Ask forgiveness', name: 'Astaghfirullah', dhikrId: 'astaghfirullah' },
-  { desc: 'Include your parents', name: 'Rabi-ghfirli wa liwalidayya',
-    arabic: '\u0631\u064e\u0628\u0650\u0651 \u0627\u063a\u0652\u0641\u0650\u0631\u0652 \u0644\u0650\u064a \u0648\u064e\u0644\u0650\u0648\u064e\u0627\u0644\u0650\u062f\u064e\u064a\u064e\u0651',
-    transliteration: 'Rabi-ghfirli wa liwalidayya',
-    translation: 'My Lord, forgive me and my parents.' },
-  { desc: 'Learn the longer istighfar', name: 'Astaghfirullaha-ladhi la ilaha illa Huwa-l-Hayy-al-Qayyum wa atubu ilayh',
-    arabic: '\u0623\u064e\u0633\u0652\u062a\u064e\u063a\u0652\u0641\u0650\u0631\u064f \u0627\u0644\u0644\u0647\u064e \u0627\u0644\u0630\u0650\u064a \u0644\u0627 \u0625\u0650\u0644\u0647\u064e \u0625\u0650\u0644\u0627 \u0647\u064f\u0648\u064e \u0627\u0644\u0652\u062d\u064e\u064a\u064f\u0651 \u0627\u0644\u0652\u0642\u064e\u064a\u064f\u0651\u0648\u0645\u064f \u0648\u064e\u0623\u064e\u062a\u064f\u0648\u0628\u064f \u0625\u0650\u0644\u064e\u064a\u0652\u0647\u0650',
-    transliteration: 'Astaghfirullaha-ladhi la ilaha illa Huwa-l-Hayy-al-Qayyum wa atubu ilayh',
-    translation: 'I seek the forgiveness of Allah, besides Whom there is no deity, the Ever-Living, the Sustainer of all, and I repent to Him.' },
-  { desc: 'Morning & evening protection', name: 'bismillahil-ladhi la yadurru ma\'a-smihi shay\'un fil-\'ardi wala fis-sama\'i waHuwas-Sami\'ul-\'Alim', dailyId: 'bismillahil-ladhi' },
-  { desc: 'Lean on Allah', name: 'L\u0101 \u1e25awla wa l\u0101 quwwata ill\u0101 bill\u0101h', dhikrId: 'la-hawla' }
-];
-var learnDetailIdx = null;
-
-function getStudySections() {
-  var s = Array.isArray(D.studySections) ? D.studySections : [];
-  return s.filter(function (x) { return x && (x.title || x.body); });
+/* ---------------- LEARN: reading library (16 articles, grouped) ---------------- */
+function getLearnArticles() {
+  var a = Array.isArray(D.learnArticles) ? D.learnArticles : [];
+  return a.filter(function (x) { return x && x.title && x.url; });
 }
-
-/* resolve display content for a learn item: practice dhikr, daily item, or inline */
-function learnItemContent(item) {
-  if (item.dhikrId) { var dh = dhikrById(item.dhikrId); if (dh) return dh; }
-  if (item.dailyId) {
-    var daily = getDaily();
-    var all = (daily.morning || []).concat(daily.evening || []);
-    for (var i = 0; i < all.length; i++) if (all[i] && all[i].id === item.dailyId) return all[i];
-  }
-  return item;
-}
-
-function learnItemPracticed(item) {
-  if (!item.dhikrId) return false;
-  return (Number(S.totals[item.dhikrId]) || 0) > 0;
-}
-
-function renderLearnTimeline() {
-  var i, practiced = 0;
-  for (i = 0; i < LEARN_ITEMS.length; i++) if (learnItemPracticed(LEARN_ITEMS[i])) practiced++;
-  var pct = Math.round((practiced / LEARN_ITEMS.length) * 100);
-  var html = '<button class="backlink" data-go="home">\u2190 ' + esc(T('homeName', 'Garden')) + '</button>' +
-    '<span class="kicker k-sage">A path, not a race</span>' +
-    '<div class="giant">Learn one phrase at a time.</div>' +
-    '<p class="lede">The four most accepted words are tahlil, takbir, tasbih, and tahmid. Begin there, then continue into daily remembrance.</p>';
-  html += '<div class="lp-track"><div class="lp-fill" style="width:' + pct + '%"><span>' +
-    practiced + ' of ' + LEARN_ITEMS.length + ' practiced</span></div></div>';
-  html += '<div class="learn-timeline">';
-  for (i = 0; i < LEARN_ITEMS.length; i++) {
-    (function (it, idx) {
-      var done = learnItemPracticed(it);
-      html += '<div class="lt-row' + (done ? ' done' : '') + '">' +
-        '<div class="lt-num">' + (done ? '\u2713' : (idx + 1)) + '</div>' +
-        '<div class="lt-txt"><span class="lt-desc">' + esc(it.desc) + '</span>' +
-        '<span class="lt-name">' + esc(it.name) + '</span></div>' +
-        '<button class="lt-open" data-learn-open="' + idx + '">' + (done ? 'Bloomed' : 'Open') + '</button></div>';
-    })(LEARN_ITEMS[i], i);
-  }
-  html += '</div>';
-  html += '<span class="kicker k-sage">Practice notes</span>' +
-    '<div class="giant-sm">Remembering, with care</div>';
-  var notes = getStudySections();
-  for (i = 0; i < notes.length; i++) {
-    html += '<div class="card"><h3>' + esc(notes[i].title || '') + '</h3>' +
-      '<p class="muted" style="margin:0">' + esc(notes[i].body || '') + '</p></div>';
-  }
-  return html;
-}
-
-function renderLearnDetail(it) {
-  var c = learnItemContent(it);
-  var html = '<button class="backlink" data-learn-back="1">\u2190 Learn</button>' +
-    '<span class="kicker k-sage">' + esc(it.desc || 'Learn') + '</span>';
-  if (c.arabic) html += '<div class="arabic arabic-big" dir="rtl">' + esc(c.arabic) + '</div>';
-  html += '<p class="translit" style="text-align:center">' + esc(c.transliteration || it.name) + '</p>';
-  if (c.translation) html += '<p class="translation" style="text-align:center">' + esc(c.translation) + '</p>';
-  if (c.virtue) html += '<div class="card"><p class="muted" style="margin:0">' + esc(c.virtue) + '</p></div>';
-  if (c.note) html += '<p class="muted" style="text-align:center">' + esc(c.note) + '</p>';
-  if (c.target) html += '<p class="muted" style="text-align:center">Suggested count: <b>' + esc(String(c.target)) + '</b></p>';
-  if (it.dhikrId && dhikrById(it.dhikrId)) {
-    html += '<button class="btn-gold" data-learn-practice="' + esc(it.dhikrId) + '">Practice this dhikr \u2192</button>';
-  }
-  return html;
+function getLearnGroups() {
+  var g = Array.isArray(D.learnArticleGroups) ? D.learnArticleGroups : [];
+  return g.filter(function (x) { return x && x.id && x.name; });
 }
 
 function renderLearn() {
   var sec = el('screen-learn');
   if (!sec) return;
-  var html = (learnDetailIdx !== null && LEARN_ITEMS[learnDetailIdx])
-    ? renderLearnDetail(LEARN_ITEMS[learnDetailIdx])
-    : renderLearnTimeline();
+  var arts = getLearnArticles();
+  var groups = getLearnGroups();
+  var html = '<button class="backlink" data-go="home">← ' + esc(T('homeName', 'Garden')) + '</button>' +
+    '<span class="kicker k-sage">Read and learn</span>' +
+    '<div class="giant">Learn</div>' +
+    '<p class="lede">Short reads for young hearts — work through the Dear Youth sessions, then explore dhikr, repentance, and character.</p>';
+  if (!arts.length) {
+    html += '<div class="card"><div class="empty-note">Articles are being prepared —<br>check back soon, inshaAllah.</div></div>';
+  } else {
+    var order = groups.length ? groups : [{ id: null, name: '', desc: '' }];
+    for (var gi = 0; gi < order.length; gi++) {
+      (function (gr) {
+        var list = [];
+        for (var i = 0; i < arts.length; i++) {
+          if (gr.id === null || arts[i].group === gr.id) list.push({ a: arts[i], idx: i });
+        }
+        if (!list.length) return;
+        if (gr.name) {
+          html += '<span class="kicker k-sage">' + esc(gr.name) + '</span>';
+          if (gr.desc) html += '<p class="muted" style="margin:0 0 10px">' + esc(gr.desc) + '</p>';
+        }
+        for (var j = 0; j < list.length; j++) {
+          (function (entry) {
+            var a = entry.a;
+            html += '<div class="card article-card" data-learn-article="' + entry.idx + '" role="button" tabindex="0">' +
+              '<h3>📄 ' + esc(a.title) + '</h3>' +
+              (a.summary ? '<p class="muted">' + esc(a.summary) + '</p>' : '') +
+              '<span class="muted">Tap to read →</span></div>';
+          })(list[j]);
+        }
+      })(order[gi]);
+    }
+  }
   sec.innerHTML = html;
   var gos = sec.querySelectorAll('[data-go]');
   for (var k = 0; k < gos.length; k++) {
     (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[k]);
   }
-  var opens = sec.querySelectorAll('[data-learn-open]');
-  for (var q = 0; q < opens.length; q++) {
-    (function (b) { b.addEventListener('click', function () { learnDetailIdx = Number(b.getAttribute('data-learn-open')); renderLearn(); }); })(opens[q]);
+  var cards = sec.querySelectorAll('[data-learn-article]');
+  for (var c = 0; c < cards.length; c++) {
+    (function (card) {
+      function open() {
+        var a = getLearnArticles()[Number(card.getAttribute('data-learn-article'))];
+        readerArticle = { title: a.title, url: a.url, description: a.summary, embed: true };
+        readerBackScreen = 'learn';
+        renderReader();
+        showScreen('reader');
+      }
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+    })(cards[c]);
   }
-  var backs = sec.querySelectorAll('[data-learn-back]');
-  for (var r = 0; r < backs.length; r++) {
-    (function (b) { b.addEventListener('click', function () { learnDetailIdx = null; renderLearn(); }); })(backs[r]);
-  }
-  var pracs = sec.querySelectorAll('[data-learn-practice]');
-  for (var p = 0; p < pracs.length; p++) {
-    (function (b) { b.addEventListener('click', function () {
-      var id = b.getAttribute('data-learn-practice');
-      PC.dhikrId = id; PC.count = 0;
-      var ndh = dhikrById(id);
-      if (ndh && Number(ndh.target) > 0) PC.target = Number(ndh.target);
-      showScreen('practice');
-    }); })(pracs[p]);
-  }
-}
-
-function learnDhikrRow(dh) {
-  var html = '<div class="stage-dhikr">';
-  if (dh.arabic) html += arabicBlock(dh.arabic, 'arabic-mid');
-  if (dh.transliteration) html += '<p class="translit" style="margin:4px 0">' + esc(dh.transliteration) + '</p>';
-  if (dh.translation) html += '<p class="translation" style="margin:0">' + esc(dh.translation) + '</p>';
-  html += '</div>';
-  return html;
 }
 
 /* ---------------- HERBARIUM (codex) ---------------- */
@@ -2049,6 +2472,7 @@ function renderHerbarium() {
 
 /* ---------------- ARTICLES ---------------- */
 var readerArticle = null;
+var readerBackScreen = 'articles'; // 'articles' | 'learn'
 
 function renderArticles() {
   var sec = el('screen-articles');
@@ -2075,6 +2499,7 @@ function renderArticles() {
     (function (card) {
       function open() {
         readerArticle = getArticles()[Number(card.getAttribute('data-idx'))];
+        readerBackScreen = 'articles';
         renderReader();
         showScreen('reader');
       }
@@ -2109,7 +2534,9 @@ function renderReader() {
   }
   var backs = sec.querySelectorAll('[data-back]');
   for (var i = 0; i < backs.length; i++) {
-    backs[i].addEventListener('click', function () { showScreen('articles'); });
+    (function (b) {
+      b.addEventListener('click', function () { showScreen(readerBackScreen === 'learn' ? 'learn' : 'articles'); });
+    })(backs[i]);
   }
 }
 
@@ -2212,42 +2639,152 @@ function renderGettingStarted() {
   if (b) b.addEventListener('click', function () { showScreen('practice'); });
 }
 
-/* ---------------- SPROUT mini-game (Doodle Jump-style climber) ----------------
-   Skill only: Sprout auto-bounces, the player steers by touch-and-slide
-   (pointer events — no buttons). Platforms generate endlessly upward via a
-   deterministic seeded PRNG; the run ends when Sprout falls. The animation
-   loop draws straight to canvas and NEVER re-renders the app per frame. */
-var sproutG = null; // active run state, or null
+/* ---------------- ADHKAR ARCADE (four skill games) ----------------
+   Each attempt costs GAME_COST credits, deducted up front. All games draw
+   straight to canvas on rAF and NEVER re-render the app per frame.
+   Touch-only controls, no gameplay buttons, no luck-based mechanics. */
+var GAME_COST = 5;
+var arcadeScreen = 'menu'; // 'menu' | 'sprout' | 'flip' | 'firefly' | 'vine'
+var sproutG = null, flipG = null, fireflyG = null, vineG = null; // active run states
+
+function nowMs() {
+  return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now();
+}
+function arcadeCancel(G) {
+  if (G && G.raf) { try { cancelAnimationFrame(G.raf); } catch (e) {} }
+}
+function stopArcade() {
+  arcadeCancel(sproutG); arcadeCancel(flipG); arcadeCancel(fireflyG); arcadeCancel(vineG);
+  sproutG = flipG = fireflyG = vineG = null;
+  try {
+    ['sprout-canvas', 'flip-canvas', 'firefly-canvas', 'vine-canvas'].forEach(function (id) {
+      var c = el(id);
+      if (c) {
+        c.onpointerdown = c.onpointermove = c.onpointerup = c.onpointercancel = null;
+        c.ontouchstart = c.ontouchmove = c.ontouchend = null;
+      }
+    });
+  } catch (e) {}
+}
+/* deduct one attempt; returns the attempt number, or 0 when too poor */
+function arcadeStartDeduct(gameId) {
+  if ((Number(S.credits) || 0) < GAME_COST) { toast('Not enough credits yet 🪙'); return 0; }
+  S.credits -= GAME_COST;
+  var n = bumpArcadeAttempts(gameId);
+  saveState();
+  return n;
+}
+/* canvas setup; the wrap must already be unhidden so it has a width */
+function arcadeCanvas(wrapId, canvasId, height) {
+  var wrap = el(wrapId), canvas = el(canvasId);
+  if (!wrap || !canvas) return null;
+  var dpr = (typeof window.devicePixelRatio === 'number' && window.devicePixelRatio > 0) ? window.devicePixelRatio : 1;
+  var W = wrap.clientWidth || 340, H = height || 480;
+  canvas.style.height = H + 'px';
+  try { canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr); } catch (e) {}
+  var ctx = canvas.getContext('2d');
+  if (!ctx) { toast('Game unavailable on this device'); return null; }
+  try { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {}
+  return { wrap: wrap, canvas: canvas, ctx: ctx, W: W, H: H };
+}
+function arcadeShowRun(wrapId, overId, startCardId) {
+  var wrap = el(wrapId);
+  if (wrap) wrap.hidden = false;
+  var over = el(overId);
+  if (over) over.hidden = true;
+  var sc = el(startCardId);
+  if (sc) sc.style.display = 'none';
+  try { wrap.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+}
+/* shared game-over overlay */
+function arcadeOverHtml(gameId, score, unit, isBest, extraHtml) {
+  var canAfford = (Number(S.credits) || 0) >= GAME_COST;
+  var def = arcadeGameDef(gameId);
+  return '<div class="sprout-result"><div style="font-size:2.6rem">' + def.emoji + '</div>' +
+    '<h2>' + (isBest ? 'New best!' : esc(def.name) + ' over!') + '</h2>' +
+    '<div class="sprout-score">' + fmtNum(score) + ' <small style="font-size:1rem;color:var(--sage)">' + esc(unit) + '</small></div>' +
+    (isBest ? '<p class="kicker k-gold">New personal best!</p>'
+            : '<p class="muted">Best: ' + fmtNum(arcadeHigh(gameId)) + ' ' + esc(unit) + '</p>') +
+    (extraHtml || '') +
+    '<div class="btn-row" style="justify-content:center">' +
+    '<button class="btn-gold" data-again="' + gameId + '"' + (canAfford ? '' : ' disabled') + '>' +
+    (canAfford ? 'Play again · ' + GAME_COST + ' 🪙' : 'Need ' + GAME_COST + ' 🪙 to play') + '</button>' +
+    '<button class="btn-ghost" data-done>Done</button></div></div>';
+}
+function wireArcadeOver(overEl, startFn) {
+  if (!overEl) return;
+  var again = overEl.querySelector('[data-again]');
+  if (again && !again.disabled) again.addEventListener('click', startFn);
+  var done = overEl.querySelector('[data-done]');
+  if (done) done.addEventListener('click', function () { arcadeScreen = 'menu'; renderGame(); });
+}
+function arcadeUnlockLines(lists, oldBest, newBest) {
+  var html = '';
+  for (var i = 0; i < lists.length; i++) {
+    var newly = newlyUnlocked(lists[i], oldBest, newBest);
+    for (var j = 0; j < newly.length; j++) {
+      html += '<p class="kicker k-gold">🎽 New unlock: ' + esc(newly[j].name) + '</p>';
+    }
+  }
+  return html;
+}
+/* customization grid shared by all games (opts: {id,name,emoji?,color?,at}) */
+function customGrid(title, opts, equippedId, best, attr) {
+  var html = '<div class="card"><span class="kicker k-sage">' + esc(title) + '</span><div class="costume-grid">';
+  for (var i = 0; i < opts.length; i++) {
+    (function (o) {
+      var owned = best >= o.at;
+      var active = equippedId === o.id;
+      var face = o.color
+        ? '<span class="swatch" style="background:' + o.color + '"></span>'
+        : '<span class="costume-emoji">' + (owned ? (o.emoji || '✦') : '🔒') + '</span>';
+      html += '<button class="costume' + (active ? ' active' : '') + '" data-custom="' + attr + ':' + o.id + '"' +
+        (owned ? '' : ' disabled') + '>' + face +
+        '<b>' + esc(o.name) + '</b>' +
+        '<i>' + (owned ? (active ? 'Selected' : 'Tap to select') : 'Best ' + fmtNum(o.at)) + '</i></button>';
+    })(opts[i]);
+  }
+  return html + '</div></div>';
+}
+function wireCustom(sec, onPick) {
+  var cs = sec.querySelectorAll('[data-custom]');
+  for (var k = 0; k < cs.length; k++) {
+    (function (b) {
+      b.addEventListener('click', function () {
+        if (b.disabled) return;
+        onPick(b.getAttribute('data-custom'));
+      });
+    })(cs[k]);
+  }
+}
+function arcadeBalanceCard() {
+  return '<div class="card"><div class="row-between"><div><span class="kicker k-gold">🪙 Your coins</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.credits) + '</div></div>' +
+    '<div style="text-align:right"><span class="kicker k-sage">Per attempt</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + GAME_COST + ' 🪙</div></div></div>' +
+    '<p class="muted" style="margin:8px 0 0">Earn coins by completing morning &amp; evening adhkar — higher levels earn more.</p></div>';
+}
+function arcadeStartCard(gameId, emoji, readyText, startId) {
+  var canAfford = (Number(S.credits) || 0) >= GAME_COST;
+  return '<div class="card" style="text-align:center" id="' + startId + '">' +
+    '<div style="font-size:2.4rem">' + emoji + '</div>' +
+    '<p class="muted">' + readyText + '</p>' +
+    '<button class="btn-gold" id="' + startId + '-btn"' + (canAfford ? '' : ' disabled') + '>' +
+    (canAfford ? 'Start · ' + GAME_COST + ' 🪙' : 'Need ' + GAME_COST + ' coins to play') + '</button>' +
+    (canAfford ? '' : '<p class="muted" style="margin-top:8px">Complete morning &amp; evening adhkar to earn coins.</p>') +
+    '</div>';
+}
+
+/* ---------------- SPROUT (upgraded Doodle Jump-style climber) ----------------
+   Auto-bounces; steer by touch-and-slide. Quick tap = one bonus mid-air jump
+   per platform contact. Difficulty tiers every 100 m: moving platforms,
+   break-after-one-bounce platforms, springs, and a 5-second jetpack pickup. */
 
 function sproutSkin() {
   var t = (typeof currentTheme === 'function') ? currentTheme() : 'garden';
   if (t === 'highway') return { bgTop: '#182236', bgBot: '#0a0e16', plat: '#46586f', edge: '#ffd23f', deco: '🏁', name: 'Turbo Climb' };
   if (t === 'mine') return { bgTop: '#2b1f12', bgBot: '#0f0b07', plat: '#7a5636', edge: '#ffcf6e', deco: '💎', name: 'Shaft Climb' };
   return { bgTop: '#16281d', bgBot: '#0b100e', plat: '#2f6b4f', edge: '#9fe0b8', deco: '🌸', name: 'Sprout Climb' };
-}
-
-function stopSprout() {
-  if (sproutG) {
-    if (sproutG.raf) { try { cancelAnimationFrame(sproutG.raf); } catch (e) {} }
-    sproutG = null;
-  }
-  try {
-    var c = el('sprout-canvas');
-    if (c) { c.onpointerdown = c.onpointermove = c.onpointerup = c.onpointercancel = null; }
-  } catch (e) {}
-}
-
-function sproutUnlockCheck() {
-  var newly = [];
-  for (var i = 0; i < SPROUT_COSTUMES.length; i++) {
-    var c = SPROUT_COSTUMES[i];
-    if (S.sproutHigh >= c.at && S.sproutCostumes.indexOf(c.id) === -1) {
-      S.sproutCostumes.push(c.id);
-      newly.push(c);
-    }
-  }
-  if (newly.length) saveState();
-  return newly;
 }
 
 function sproutRoundRect(ctx, x, y, w, h, r) {
@@ -2260,14 +2797,63 @@ function sproutRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
+function sproutTier(G) { return Math.floor(Math.max(0, -G.minWy / 10) / 100); }
+
 function sproutAddPlat(G) {
   var top = G.plats.length ? G.plats[G.plats.length - 1].wy : 30;
-  var gap = 62 + G.rng() * 46; // 62..108px — always clearable (jump height ~139px)
-  var w = G.PW;
-  G.plats.push({ x: G.rng() * (G.W - w), wy: top - gap, w: w });
+  var tier = sproutTier(G);
+  var gap = Math.min(118, 62 + G.rng() * 46 + tier * 5); // always clearable (jump ~139px)
+  var w = Math.max(42, G.PW - tier * 3); // platforms narrow with height — difficulty never plateaus
+  var kind = 'normal';
+  var rt = Math.min(4, tier), r = G.rng();
+  var breakP = rt >= 1 ? 0.05 + rt * 0.045 : 0;
+  var moveP = rt >= 1 ? 0.08 + rt * 0.05 : 0;
+  if (r < breakP) kind = 'break';
+  else if (r < breakP + moveP) kind = 'moving';
+  var p = { x: G.rng() * (G.W - w), wy: top - gap, w: w, kind: kind, vx: 0,
+            broken: false, breakT: 0, spring: false, jetpack: false };
+  if (kind === 'moving') p.vx = (55 + tier * 22) * (G.rng() < 0.5 ? -1 : 1);
+  if (kind === 'normal' && G.rng() < 0.08) p.spring = true;
+  if (tier >= 1 && G.rng() < 0.03) p.jetpack = true;
+  G.plats.push(p);
+}
+
+function sproutGen(G) {
+  var highest = G.plats[G.plats.length - 1].wy;
+  while (highest > G.camY - 80) { sproutAddPlat(G); highest = G.plats[G.plats.length - 1].wy; }
+  var kept = [];
+  for (var i = 0; i < G.plats.length; i++) {
+    var p = G.plats[i];
+    if (p.wy > G.camY + G.H + 80) continue;
+    if (p.broken && p.breakT <= 0) continue;
+    kept.push(p);
+  }
+  G.plats = kept;
+}
+
+function collectJetpack(G) {
+  for (var i = 0; i < G.plats.length; i++) {
+    var p = G.plats[i];
+    if (!p.jetpack || p.broken) continue;
+    if (Math.abs(G.x - (p.x + p.w / 2)) < 30 && Math.abs(G.wy - (p.wy - 30)) < 36) {
+      p.jetpack = false;
+      G.jetpack = 5;
+      break;
+    }
+  }
 }
 
 function sproutStep(G, dt) {
+  var i, p;
+  for (i = 0; i < G.plats.length; i++) {
+    p = G.plats[i];
+    if (p.kind === 'moving' && !p.broken) {
+      p.x += p.vx * dt;
+      if (p.x <= 0) { p.x = 0; p.vx = Math.abs(p.vx); }
+      else if (p.x + p.w >= G.W) { p.x = G.W - p.w; p.vx = -Math.abs(p.vx); }
+    }
+    if (p.broken) p.breakT -= dt;
+  }
   if (G.ptr) {
     var want = (G.ptrX - G.x) * 18;
     if (want > 520) want = 520;
@@ -2276,6 +2862,21 @@ function sproutStep(G, dt) {
   } else {
     G.vx *= Math.pow(0.0005, dt);
     if (Math.abs(G.vx) < 4) G.vx = 0;
+  }
+  // jetpack: 5 seconds of powered flight
+  if (G.jetpack > 0) {
+    G.jetpack -= dt;
+    G.vy = -950;
+    G.wy += G.vy * dt;
+    G.x += G.vx * dt;
+    if (G.x < -20) G.x += G.W + 40;
+    if (G.x > G.W + 20) G.x -= G.W + 40;
+    if (G.wy < G.camY + G.H * 0.42) G.camY = G.wy - G.H * 0.42;
+    if (G.wy < G.minWy) { G.minWy = G.wy; G.score = Math.floor(-G.minWy / 10); }
+    sproutGen(G);
+    collectJetpack(G);
+    if (G.jetpack <= 0) { G.vy = -200; G.airJump = true; }
+    return;
   }
   var prevBottom = G.wy + 17;
   G.vy += G.GRAV * dt;
@@ -2286,20 +2887,23 @@ function sproutStep(G, dt) {
   if (G.x > G.W + 20) G.x -= G.W + 40;
   if (G.vy > 0) {
     var nb = G.wy + 17;
-    for (var i = 0; i < G.plats.length; i++) {
-      var p = G.plats[i];
+    for (i = 0; i < G.plats.length; i++) {
+      p = G.plats[i];
+      if (p.broken) continue;
       if (prevBottom <= p.wy && nb >= p.wy && G.x + 14 > p.x && G.x - 14 < p.x + p.w) {
         G.wy = p.wy - 17;
-        G.vy = -G.BOUNCE;
+        G.vy = p.spring ? -G.BOUNCE * 1.7 : -G.BOUNCE;
+        G.airJump = true; // one bonus mid-air jump per platform contact
+        if (p.kind === 'break') { p.broken = true; p.breakT = 0.35; }
+        if (p.jetpack) { p.jetpack = false; G.jetpack = 5; }
         break;
       }
     }
   }
+  collectJetpack(G);
   if (G.wy < G.camY + G.H * 0.42) G.camY = G.wy - G.H * 0.42;
   if (G.wy < G.minWy) { G.minWy = G.wy; G.score = Math.floor(-G.minWy / 10); }
-  var highest = G.plats[G.plats.length - 1].wy;
-  while (highest > G.camY - 80) { sproutAddPlat(G); highest = G.plats[G.plats.length - 1].wy; }
-  while (G.plats.length && G.plats[0].wy > G.camY + G.H + 80) G.plats.shift();
+  sproutGen(G);
   if (G.wy - G.camY > G.H + 60) sproutGameOver(G);
 }
 
@@ -2314,18 +2918,30 @@ function sproutDraw(G) {
     var yy = (((i * 57) % H - G.camY * 0.3) % H + H) % H;
     ctx.fillRect(dx, yy, 3, 3);
   }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   for (i = 0; i < G.plats.length; i++) {
     var p = G.plats[i], sy = p.wy - G.camY;
-    if (sy < -30 || sy > H + 30) continue;
-    ctx.fillStyle = skin.plat;
+    if (sy < -40 || sy > H + 40) continue;
+    var alpha = (p.broken && p.breakT > 0) ? Math.max(0.15, p.breakT / 0.35) : 1;
+    ctx.globalAlpha = alpha;
+    if (p.kind === 'break') ctx.fillStyle = '#8a6a4a';
+    else if (p.kind === 'moving') ctx.fillStyle = '#5a7a9a';
+    else ctx.fillStyle = skin.plat;
     sproutRoundRect(ctx, p.x, sy, p.w, G.PH, 7); ctx.fill();
-    ctx.fillStyle = skin.edge;
+    ctx.fillStyle = p.kind === 'break' ? '#c9a227' : skin.edge;
     ctx.fillRect(p.x + 4, sy, p.w - 8, 3);
-    if (i % 4 === 1) { ctx.font = '14px serif'; ctx.fillText(skin.deco, p.x + p.w / 2 - 7, sy + 2); }
+    ctx.font = '13px serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    if (p.kind === 'moving') ctx.fillText('⇄', p.x + p.w / 2, sy + 8);
+    if (p.kind === 'break' && !p.broken) ctx.fillText('✕', p.x + p.w / 2, sy + 8);
+    if (p.spring) { ctx.font = '15px serif'; ctx.fillText('🌀', p.x + p.w / 2, sy - 4); }
+    if (p.jetpack) { ctx.font = '20px serif'; ctx.fillText('🚀', p.x + p.w / 2, sy - 22); }
+    ctx.globalAlpha = 1;
   }
   var sxy = G.wy - G.camY;
+  if (G.jetpack > 0) { ctx.font = '22px serif'; ctx.fillText('🔥', G.x, sxy + 24); }
+  else if (G.airJump) { ctx.font = '13px serif'; ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.fillText('✦', G.x + 20, sxy - 20); }
   ctx.font = '36px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji",serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillText(G.costume.emoji, G.x, sxy);
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   sproutRoundRect(ctx, 10, 10, 118, 34, 10); ctx.fill();
@@ -2333,76 +2949,56 @@ function sproutDraw(G) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
   ctx.fillText('▲ ' + G.score, 22, 28);
   ctx.textAlign = 'right';
-  ctx.fillText('Best ' + Math.max(S.sproutHigh, G.score), W - 22, 28);
+  ctx.fillText('Best ' + Math.max(arcadeHigh('sprout'), G.score), W - 22, 28);
+  if (G.jetpack > 0) {
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffd94d';
+    ctx.font = '700 14px Nunito,sans-serif';
+    ctx.fillText('🚀 ' + G.jetpack.toFixed(1) + 's', W / 2, 60);
+  }
 }
 
 function sproutGameOver(G) {
   if (G.over) return;
   G.over = true;
-  if (sproutG === G) {
-    if (G.raf) { try { cancelAnimationFrame(G.raf); } catch (e) {} }
-    sproutG = null;
-  }
-  var isHigh = G.score > S.sproutHigh;
-  if (isHigh) S.sproutHigh = G.score;
-  var newly = sproutUnlockCheck();
-  saveState();
+  if (sproutG === G) { arcadeCancel(sproutG); sproutG = null; }
+  var oldBest = arcadeHigh('sprout');
+  var isBest = setArcadeHigh('sprout', G.score);
+  var extra = arcadeUnlockLines([SPROUT_COSTUMES], oldBest, arcadeHigh('sprout'));
   var over = el('sprout-over');
   if (!over) return;
-  var canAfford = (Number(S.credits) || 0) >= SPROUT_COST;
-  var html = '<div class="sprout-result"><div style="font-size:2.6rem">🌟</div>' +
-    '<h2>Climb over!</h2><div class="sprout-score">' + fmtNum(G.score) + '</div>' +
-    (isHigh ? '<p class="kicker k-gold">New best climb!</p>' : '<p class="muted">Best: ' + fmtNum(S.sproutHigh) + '</p>');
-  for (var i = 0; i < newly.length; i++) {
-    html += '<p class="kicker k-gold">🎽 New costume unlocked: ' + esc(newly[i].name) + ' ' + newly[i].emoji + '</p>';
-  }
-  html += '<div class="btn-row" style="justify-content:center">' +
-    '<button class="btn-gold" id="sprout-again"' + (canAfford ? '' : ' disabled') + '>' +
-    (canAfford ? 'Climb again · ' + SPROUT_COST + ' 🪙' : 'Need ' + SPROUT_COST + ' 🪙 for another climb') + '</button>' +
-    '<button class="btn-ghost" id="sprout-done">Done</button></div></div>';
-  over.innerHTML = html;
+  over.innerHTML = arcadeOverHtml('sprout', G.score, 'm', isBest, extra);
   over.hidden = false;
-  var again = el('sprout-again');
-  if (again && canAfford) again.addEventListener('click', function () { startSproutRun(); });
-  var done = el('sprout-done');
-  if (done) done.addEventListener('click', function () { renderGame(); });
-  if (isHigh) {
-    try { celebrate({ emoji: '🧗', title: 'New best climb!', sub: 'You reached ' + fmtNum(G.score) + ' — alhamdulillah!' }); } catch (e) {}
+  wireArcadeOver(over, startSproutRun);
+  if (isBest) {
+    try { celebrate({ emoji: '🧗', title: 'New best climb!', sub: 'You reached ' + fmtNum(G.score) + ' m — alhamdulillah!' }); } catch (e) {}
   }
 }
 
 function startSproutRun() {
-  if ((Number(S.credits) || 0) < SPROUT_COST) { toast('Not enough credits yet 🪙'); return; }
-  S.credits -= SPROUT_COST;
-  S.sproutAttempts++;
-  saveState();
-  var wrap = el('sprout-wrap'), canvas = el('sprout-canvas'), over = el('sprout-over'), startCard = el('sprout-start-card');
-  if (!wrap || !canvas) return;
-  stopSprout();
-  wrap.hidden = false;
-  if (over) over.hidden = true;
-  if (startCard) startCard.style.display = 'none';
+  var attempt = arcadeStartDeduct('sprout');
+  if (!attempt) return;
+  var wrap = el('sprout-wrap');
+  if (wrap) wrap.hidden = false;
+  var setup = arcadeCanvas('sprout-wrap', 'sprout-canvas', 480);
+  if (!setup) return;
+  stopArcade();
+  arcadeShowRun('sprout-wrap', 'sprout-over', 'sprout-start-card');
+  var canvas = setup.canvas;
   var skin = sproutSkin();
-  var dpr = (typeof window.devicePixelRatio === 'number' && window.devicePixelRatio > 0) ? window.devicePixelRatio : 1;
-  var W = wrap.clientWidth || 340, H = 480;
-  canvas.style.height = H + 'px';
-  try {
-    canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
-  } catch (e) {}
-  var ctx = canvas.getContext('2d');
-  if (!ctx) { toast('Game unavailable on this device'); return; }
-  try { ctx.setTransform(dpr, 0, 0, dpr, 0, 0); } catch (e) {}
-  var rng = sproutRng(S.sproutAttempts * 7919 + 13);
+  var rng = sproutRng(attempt * 7919 + 13);
+  var W = setup.W, H = setup.H;
   var G = {
-    ctx: ctx, W: W, H: H, skin: skin, rng: rng,
+    ctx: setup.ctx, W: W, H: H, skin: skin, rng: rng,
     x: W / 2, wy: 0, vy: 0, vx: 0,
     camY: 0, minWy: 0, score: 0,
-    plats: [], raf: 0, last: 0, over: false,
-    ptr: false, ptrX: W / 2,
+    plats: [], raf: 0, over: false,
+    ptr: false, ptrX: W / 2, downT: 0, downX: 0, downY: 0,
+    airJump: false, jetpack: 0,
     costume: sproutCostumeById(S.sproutEquipped),
     GRAV: 2300, BOUNCE: 800, PW: 66, PH: 14
   };
-  G.plats.push({ x: W / 2 - G.PW / 2, wy: 30, w: G.PW });
+  G.plats.push({ x: W / 2 - G.PW / 2, wy: 30, w: G.PW, kind: 'normal', vx: 0, broken: false, breakT: 0, spring: false, jetpack: false });
   for (var i = 0; i < 14; i++) sproutAddPlat(G);
   G.vy = -G.BOUNCE; // launch immediately — the first jump starts with the run
   sproutG = G;
@@ -2414,92 +3010,668 @@ function startSproutRun() {
   }
   canvas.onpointerdown = function (e) {
     G.ptr = true; G.ptrX = toX(e);
+    G.downT = nowMs(); G.downX = e.clientX; G.downY = e.clientY;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
     if (e.preventDefault) e.preventDefault();
   };
   canvas.onpointermove = function (e) { if (G.ptr) G.ptrX = toX(e); };
-  function endPtr() { G.ptr = false; }
-  canvas.onpointerup = endPtr; canvas.onpointercancel = endPtr;
-  try {
-    var perf = (typeof performance !== 'undefined' && performance.now) ? performance : Date;
-    G.last = perf.now();
-    var nowFn = function () { return (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now(); };
-    var frame = function () {
-      if (!sproutG || sproutG !== G || G.over) return;
-      var t = nowFn(), dt = (t - G.last) / 1000;
-      G.last = t;
-      if (dt > 0.05) dt = 0.05;
-      if (dt < 0) dt = 0;
-      sproutStep(G, dt);
-      sproutDraw(G);
-      if (!G.over) G.raf = requestAnimationFrame(frame);
-    };
-    G.raf = requestAnimationFrame(frame);
-  } catch (e) { /* loop optional */ }
-  try { wrap.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+  canvas.onpointerup = function (e) {
+    // quick tap (not a steering slide) = the bonus mid-air jump
+    if (G.ptr && e && typeof e.clientX === 'number') {
+      var dtms = nowMs() - G.downT;
+      var moved = Math.hypot(e.clientX - G.downX, e.clientY - G.downY);
+      if (dtms < 260 && moved < 16 && G.airJump && !G.over && G.jetpack <= 0) {
+        G.vy = -G.BOUNCE * 0.9;
+        G.airJump = false;
+      }
+    }
+    G.ptr = false;
+  };
+  canvas.onpointercancel = function () { G.ptr = false; };
+  G.last = nowMs();
+  (function kick() {
+    if (!sproutG || sproutG !== G || G.over) return;
+    var t = nowMs(), dt = (t - G.last) / 1000;
+    G.last = t;
+    if (dt > 0.05) dt = 0.05;
+    if (dt < 0) dt = 0;
+    sproutStep(G, dt);
+    sproutDraw(G);
+    if (!G.over) G.raf = requestAnimationFrame(kick);
+  })();
 }
 
+/* ---------------- FLIP RUNNER (Gravity Guy-style) ----------------
+   The runner sprints right on its own; tap anywhere to flip gravity and run
+   on the ceiling. Dodge gaps and spike blocks. Endless, scored in meters. */
+function flipSkin() {
+  var t = currentTheme();
+  if (t === 'highway') return { bgTop: '#1a2233', bgBot: '#0a0e16', ground: '#3a4a63', edge: '#ffd23f' };
+  if (t === 'mine') return { bgTop: '#2b1f12', bgBot: '#0f0b07', ground: '#6b4e2e', edge: '#ffcf6e' };
+  return { bgTop: '#14231a', bgBot: '#0b100e', ground: '#2f6b4f', edge: '#9fe0b8' };
+}
+function flipGen(G, tier) {
+  function genSide(nextKey, list, isFloor) {
+    while (G[nextKey] < G.W + 140) {
+      var gap = 90 + G.rng() * 90 + tier * 14;
+      var w = 150 + G.rng() * 170;
+      var x = G[nextKey] + gap;
+      list.push({ x: x, w: w });
+      if (tier >= 1 && w > 200 && G.rng() < 0.22 + tier * 0.04) {
+        G.obs.push({ x: x + 50 + G.rng() * (w - 120), side: isFloor ? 'floor' : 'ceil' });
+      }
+      G[nextKey] = x + w;
+    }
+  }
+  genSide('nextF', G.floors, true);
+  genSide('nextC', G.ceils, false);
+}
+function flipStep(G, dt) {
+  var tier = Math.floor(G.score / 100);
+  var speed = 235 + tier * 30;
+  var floorY = G.H - 46, ceilY = 46;
+  G.vy += G.g * 2600 * dt;
+  if (G.vy > 1500) G.vy = 1500;
+  if (G.vy < -1500) G.vy = -1500;
+  G.y += G.vy * dt;
+  G.dist += speed * dt;
+  G.score = Math.floor(G.dist / 40);
+  var i;
+  for (i = 0; i < G.floors.length; i++) G.floors[i].x -= speed * dt;
+  for (i = 0; i < G.ceils.length; i++) G.ceils[i].x -= speed * dt;
+  for (i = 0; i < G.obs.length; i++) G.obs[i].x -= speed * dt;
+  var px = G.x;
+  function segAt(list) {
+    for (var k = 0; k < list.length; k++) {
+      var sg = list[k];
+      if (px >= sg.x && px <= sg.x + sg.w) return sg;
+    }
+    return null;
+  }
+  if (G.g > 0) {
+    var f = segAt(G.floors);
+    if (f && G.vy >= 0 && G.y + G.h / 2 >= floorY) { G.y = floorY - G.h / 2; G.vy = 0; G.grounded = true; }
+    else if (G.grounded && !f) G.grounded = false;
+    if (G.y - G.h / 2 > G.H + 50) { flipGameOver(G); return; }
+  } else {
+    var c = segAt(G.ceils);
+    if (c && G.vy <= 0 && G.y - G.h / 2 <= ceilY) { G.y = ceilY + G.h / 2; G.vy = 0; G.grounded = true; }
+    else if (G.grounded && !c) G.grounded = false;
+    if (G.y + G.h / 2 < -50) { flipGameOver(G); return; }
+  }
+  for (i = 0; i < G.obs.length; i++) {
+    var o = G.obs[i];
+    var oy = o.side === 'floor' ? floorY - 24 : ceilY;
+    if (G.x + G.w / 2 > o.x && G.x - G.w / 2 < o.x + 24 &&
+        G.y + G.h / 2 > oy && G.y - G.h / 2 < oy + 24) {
+      flipGameOver(G); return;
+    }
+  }
+  flipGen(G, tier);
+  G.floors = G.floors.filter(function (sg) { return sg.x + sg.w > -80; });
+  G.ceils = G.ceils.filter(function (sg) { return sg.x + sg.w > -80; });
+  G.obs = G.obs.filter(function (o) { return o.x > -80; });
+}
+function flipDraw(G) {
+  var ctx = G.ctx, W = G.W, H = G.H, skin = G.skin, i;
+  var floorY = H - 46, ceilY = 46;
+  var bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, skin.bgTop); bg.addColorStop(1, skin.bgBot);
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = skin.ground;
+  for (i = 0; i < G.ceils.length; i++) {
+    var c = G.ceils[i];
+    ctx.fillRect(c.x, 0, c.w, ceilY);
+  }
+  for (i = 0; i < G.floors.length; i++) {
+    var f = G.floors[i];
+    ctx.fillRect(f.x, floorY, f.w, H - floorY);
+  }
+  ctx.fillStyle = skin.edge;
+  for (i = 0; i < G.ceils.length; i++) ctx.fillRect(G.ceils[i].x, ceilY - 3, G.ceils[i].w, 3);
+  for (i = 0; i < G.floors.length; i++) ctx.fillRect(G.floors[i].x, floorY, G.floors[i].w, 3);
+  // spike obstacles
+  ctx.fillStyle = '#d9534f';
+  for (i = 0; i < G.obs.length; i++) {
+    var o = G.obs[i];
+    var oy = o.side === 'floor' ? floorY : ceilY;
+    ctx.beginPath();
+    if (o.side === 'floor') {
+      ctx.moveTo(o.x, oy); ctx.lineTo(o.x + 12, oy - 24); ctx.lineTo(o.x + 24, oy);
+    } else {
+      ctx.moveTo(o.x, oy); ctx.lineTo(o.x + 12, oy + 24); ctx.lineTo(o.x + 24, oy);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+  // runner: shirt torso, head, hat, shoes (flips with gravity)
+  var up = G.g < 0 ? -1 : 1;
+  var cx = G.x, cy = G.y;
+  ctx.fillStyle = G.custom.shoes.color || '#8a6a4a';
+  ctx.fillRect(cx - 11, cy + up * (G.h / 2 - 6), 9, 6);
+  ctx.fillRect(cx + 2, cy + up * (G.h / 2 - 6), 9, 6);
+  ctx.fillStyle = G.custom.shirt.color || '#f4efe3';
+  sproutRoundRect(ctx, cx - G.w / 2, cy - G.h / 2 + (up > 0 ? 8 : 0), G.w, G.h - 8, 6);
+  ctx.fill();
+  ctx.fillStyle = '#e8b98a';
+  ctx.beginPath(); ctx.arc(cx, cy - up * (G.h / 2 - 4), 9, 0, Math.PI * 2); ctx.fill();
+  if (G.custom.hat.color) {
+    ctx.fillStyle = G.custom.hat.color;
+    ctx.beginPath(); ctx.arc(cx, cy - up * (G.h / 2 - 4), 9, Math.PI, 0); ctx.fill();
+    ctx.fillRect(cx - 9, cy - up * (G.h / 2 - 4) - (up > 0 ? 2 : -2), 18, 3);
+  }
+  // HUD
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  sproutRoundRect(ctx, 10, 10, 118, 34, 10); ctx.fill();
+  ctx.fillStyle = '#f4efe3'; ctx.font = '700 16px Nunito,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('➤ ' + G.score + ' m', 22, 28);
+  ctx.textAlign = 'right';
+  ctx.fillText('Best ' + Math.max(arcadeHigh('flip'), G.score) + ' m', W - 22, 28);
+}
+function flipGameOver(G) {
+  if (G.over) return;
+  G.over = true;
+  if (flipG === G) { arcadeCancel(flipG); flipG = null; }
+  var oldBest = arcadeHigh('flip');
+  var isBest = setArcadeHigh('flip', G.score);
+  var extra = arcadeUnlockLines([FLIP_SHIRTS, FLIP_SHOES, FLIP_HATS], oldBest, arcadeHigh('flip'));
+  var over = el('flip-over');
+  if (!over) return;
+  over.innerHTML = arcadeOverHtml('flip', G.score, 'm', isBest, extra);
+  over.hidden = false;
+  wireArcadeOver(over, startFlipRun);
+  if (isBest) {
+    try { celebrate({ emoji: '🌀', title: 'New best run!', sub: 'You ran ' + fmtNum(G.score) + ' m — alhamdulillah!' }); } catch (e) {}
+  }
+}
+function startFlipRun() {
+  var attempt = arcadeStartDeduct('flip');
+  if (!attempt) return;
+  var wrap = el('flip-wrap');
+  if (wrap) wrap.hidden = false;
+  var setup = arcadeCanvas('flip-wrap', 'flip-canvas', 420);
+  if (!setup) return;
+  stopArcade();
+  arcadeShowRun('flip-wrap', 'flip-over', 'flip-start-card');
+  var canvas = setup.canvas;
+  var W = setup.W, H = setup.H;
+  var G = {
+    ctx: setup.ctx, W: W, H: H, rng: sproutRng(attempt * 104729 + 7),
+    x: Math.round(W * 0.32), y: H - 46 - 17, vy: 0, g: 1, w: 26, h: 34,
+    dist: 0, score: 0, grounded: true,
+    floors: [{ x: -60, w: W + 240 }], ceils: [{ x: -60, w: W + 240 }],
+    nextF: W + 180, nextC: W + 180, obs: [],
+    skin: flipSkin(), raf: 0, over: false,
+    custom: {
+      shirt: flipOptById(FLIP_SHIRTS, S.flipCustom.shirt),
+      shoes: flipOptById(FLIP_SHOES, S.flipCustom.shoes),
+      hat: flipOptById(FLIP_HATS, S.flipCustom.hat)
+    }
+  };
+  flipG = G;
+  canvas.onpointerdown = function (e) {
+    if (e.preventDefault) e.preventDefault();
+    if (flipG === G && !G.over) { G.g *= -1; G.vy = 0; G.grounded = false; }
+  };
+  G.last = nowMs();
+  (function kick() {
+    if (!flipG || flipG !== G || G.over) return;
+    var t = nowMs(), dt = (t - G.last) / 1000;
+    G.last = t;
+    if (dt > 0.05) dt = 0.05;
+    if (dt < 0) dt = 0;
+    flipStep(G, dt);
+    flipDraw(G);
+    if (!G.over) G.raf = requestAnimationFrame(kick);
+  })();
+}
+
+/* ---------------- FIREFLY FLIGHT (Flappy-style) ----------------
+   Tap anywhere to flap through garden arch gaps. One point per arch;
+   arches narrow and speed rises with score. */
+function startFireflyRun() {
+  var attempt = arcadeStartDeduct('firefly');
+  if (!attempt) return;
+  var wrap = el('firefly-wrap');
+  if (wrap) wrap.hidden = false;
+  var setup = arcadeCanvas('firefly-wrap', 'firefly-canvas', 480);
+  if (!setup) return;
+  stopArcade();
+  arcadeShowRun('firefly-wrap', 'firefly-over', 'firefly-start-card');
+  var canvas = setup.canvas;
+  var W = setup.W, H = setup.H;
+  var G = {
+    ctx: setup.ctx, W: W, H: H, rng: sproutRng(attempt * 1299709 + 3),
+    x: Math.round(W * 0.35), y: Math.round(H * 0.45), vy: 0, r: 12,
+    arches: [], nextX: W + 120, score: 0, over: false, raf: 0,
+    glow: colorOptById(FIREFLY_GLOWS, S.fireflyGlow).color || '#ffd94d'
+  };
+  fireflyG = G;
+  canvas.onpointerdown = function (e) {
+    if (e.preventDefault) e.preventDefault();
+    if (fireflyG === G && !G.over) G.vy = -430;
+  };
+  G.last = nowMs();
+  (function kick() {
+    if (!fireflyG || fireflyG !== G || G.over) return;
+    var t = nowMs(), dt = (t - G.last) / 1000;
+    G.last = t;
+    if (dt > 0.05) dt = 0.05;
+    if (dt < 0) dt = 0;
+    fireflyStep(G, dt);
+    fireflyDraw(G);
+    if (!G.over) G.raf = requestAnimationFrame(kick);
+  })();
+}
+function fireflyStep(G, dt) {
+  var speed = Math.min(430, 195 + G.score * 2.4);
+  G.vy += 1500 * dt;
+  if (G.vy > 900) G.vy = 900;
+  G.y += G.vy * dt;
+  var i, a;
+  for (i = 0; i < G.arches.length; i++) {
+    a = G.arches[i];
+    a.x -= speed * dt;
+    if (!a.passed && a.x + a.w < G.x) { a.passed = true; G.score++; }
+  }
+  while (G.nextX < G.W + 160) {
+    var gapH = Math.max(112, 178 - G.score * 1.7);
+    var gy = 100 + G.rng() * (G.H - 200);
+    G.arches.push({ x: G.nextX, gapY: gy, gapH: gapH, w: 56, passed: false });
+    G.nextX += 235 + G.rng() * 60;
+  }
+  G.arches = G.arches.filter(function (x) { return x.x + x.w > -60; });
+  if (G.y - G.r < 0 || G.y + G.r > G.H) { fireflyGameOver(G); return; }
+  for (i = 0; i < G.arches.length; i++) {
+    a = G.arches[i];
+    if (G.x + G.r > a.x && G.x - G.r < a.x + a.w) {
+      if (G.y - G.r < a.gapY - a.gapH / 2 || G.y + G.r > a.gapY + a.gapH / 2) {
+        fireflyGameOver(G); return;
+      }
+    }
+  }
+}
+function fireflyDraw(G) {
+  var ctx = G.ctx, W = G.W, H = G.H, i;
+  var bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#0d1626'); bg.addColorStop(1, '#101d12');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  for (i = 0; i < 30; i++) {
+    ctx.fillRect((i * 89) % W, (i * 61) % H, 2, 2);
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (i = 0; i < G.arches.length; i++) {
+    var a = G.arches[i];
+    var topB = a.gapY - a.gapH / 2, botT = a.gapY + a.gapH / 2;
+    ctx.fillStyle = '#2f6b4f';
+    sproutRoundRect(ctx, a.x, -10, a.w, topB + 10, 10); ctx.fill();
+    sproutRoundRect(ctx, a.x, botT, a.w, H - botT + 10, 10); ctx.fill();
+    ctx.fillStyle = '#9fe0b8';
+    ctx.fillRect(a.x + 5, 0, 4, topB);
+    ctx.fillRect(a.x + 5, botT, 4, H - botT);
+    ctx.font = '16px serif';
+    ctx.fillText('🌿', a.x + a.w / 2, topB - 12);
+    ctx.fillText('🌿', a.x + a.w / 2, botT + 12);
+  }
+  // firefly: glow + body
+  var gr = ctx.createRadialGradient(G.x, G.y, 2, G.x, G.y, 34);
+  gr.addColorStop(0, G.glow); gr.addColorStop(1, 'rgba(255,217,77,0)');
+  ctx.fillStyle = gr;
+  ctx.beginPath(); ctx.arc(G.x, G.y, 34, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff3b0';
+  ctx.beginPath(); ctx.arc(G.x, G.y, G.r, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#8a6a12';
+  ctx.beginPath(); ctx.arc(G.x - 4, G.y - 3, 2.4, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(G.x + 4, G.y - 3, 2.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  sproutRoundRect(ctx, 10, 10, 110, 34, 10); ctx.fill();
+  ctx.fillStyle = '#f4efe3'; ctx.font = '700 16px Nunito,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('✨ ' + G.score, 22, 28);
+  ctx.textAlign = 'right';
+  ctx.fillText('Best ' + Math.max(arcadeHigh('firefly'), G.score), W - 22, 28);
+}
+function fireflyGameOver(G) {
+  if (G.over) return;
+  G.over = true;
+  if (fireflyG === G) { arcadeCancel(fireflyG); fireflyG = null; }
+  var oldBest = arcadeHigh('firefly');
+  var isBest = setArcadeHigh('firefly', G.score);
+  var extra = arcadeUnlockLines([FIREFLY_GLOWS], oldBest, arcadeHigh('firefly'));
+  var over = el('firefly-over');
+  if (!over) return;
+  over.innerHTML = arcadeOverHtml('firefly', G.score, 'arches', isBest, extra);
+  over.hidden = false;
+  wireArcadeOver(over, startFireflyRun);
+  if (isBest) {
+    try { celebrate({ emoji: '✨', title: 'New best flight!', sub: fmtNum(G.score) + ' arches — alhamdulillah!' }); } catch (e) {}
+  }
+}
+
+/* ---------------- VINE SNAKE (classic snake) ----------------
+   Swipe to steer, or tap left/right to turn. Guide the growing vine to water
+   drops without tangling. Speed rises with every drop. */
+function vineDrop(G) {
+  var free = [];
+  for (var x = 0; x < G.N; x++) {
+    for (var y = 0; y < G.N; y++) {
+      var on = false;
+      for (var i = 0; i < G.snake.length; i++) {
+        if (G.snake[i].x === x && G.snake[i].y === y) { on = true; break; }
+      }
+      if (!on) free.push({ x: x, y: y });
+    }
+  }
+  if (!free.length) return { x: 0, y: 0 };
+  return free[Math.floor(G.rng() * free.length)];
+}
+function vineQueueDir(G, nd) {
+  var last = G.queue.length ? G.queue[G.queue.length - 1] : G.dir;
+  if ((nd.x !== -last.x || nd.y !== -last.y) && (nd.x !== last.x || nd.y !== last.y)) {
+    if (G.queue.length < 3) G.queue.push(nd);
+  }
+}
+function vineTurn(G, side) {
+  var d = G.queue.length ? G.queue[G.queue.length - 1] : G.dir;
+  vineQueueDir(G, side < 0 ? { x: d.y, y: -d.x } : { x: -d.y, y: d.x });
+}
+function vineTick(G) {
+  if (G.queue.length) G.dir = G.queue.shift();
+  var head = { x: G.snake[0].x + G.dir.x, y: G.snake[0].y + G.dir.y };
+  if (head.x < 0 || head.y < 0 || head.x >= G.N || head.y >= G.N) { vineGameOver(G); return; }
+  var grows = G.drop && head.x === G.drop.x && head.y === G.drop.y;
+  var lim = G.snake.length - (grows ? 0 : 1);
+  for (var i = 0; i < lim; i++) {
+    if (G.snake[i].x === head.x && G.snake[i].y === head.y) { vineGameOver(G); return; }
+  }
+  G.snake.unshift(head);
+  if (grows) {
+    G.score++;
+    G.tick = Math.max(80, G.tick - 3);
+    G.drop = vineDrop(G);
+  } else {
+    G.snake.pop();
+  }
+}
+function vineDraw(G) {
+  var ctx = G.ctx, W = G.W, H = G.H, cell = G.cell;
+  var bg = ctx.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#12241a'); bg.addColorStop(1, '#0b100e');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth = 1;
+  for (var gLine = 1; gLine < G.N; gLine++) {
+    ctx.beginPath(); ctx.moveTo(gLine * cell, 0); ctx.lineTo(gLine * cell, H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, gLine * cell); ctx.lineTo(W, gLine * cell); ctx.stroke();
+  }
+  if (G.drop) {
+    ctx.font = Math.round(cell * 0.8) + 'px serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('💧', (G.drop.x + 0.5) * cell, (G.drop.y + 0.5) * cell);
+  }
+  for (var i = G.snake.length - 1; i >= 0; i--) {
+    var s = G.snake[i];
+    ctx.fillStyle = i === 0 ? G.color : G.color;
+    ctx.globalAlpha = i === 0 ? 1 : 0.92;
+    sproutRoundRect(ctx, s.x * cell + 1.5, s.y * cell + 1.5, cell - 3, cell - 3, 5);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  var hx = (G.snake[0].x + 0.5) * cell, hy = (G.snake[0].y + 0.5) * cell;
+  ctx.fillStyle = '#0b100e';
+  var ex = G.dir.x * 3, ey = G.dir.y * 3;
+  ctx.beginPath(); ctx.arc(hx - 4 + ex, hy - 3 + ey, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(hx + 4 + ex, hy - 3 + ey, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  sproutRoundRect(ctx, 10, 10, 110, 34, 10); ctx.fill();
+  ctx.fillStyle = '#f4efe3'; ctx.font = '700 16px Nunito,sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillText('💧 ' + G.score, 22, 28);
+  ctx.textAlign = 'right';
+  ctx.fillText('Best ' + Math.max(arcadeHigh('vine'), G.score), G.W - 22, 28);
+}
+function vineGameOver(G) {
+  if (G.over) return;
+  G.over = true;
+  if (vineG === G) { arcadeCancel(vineG); vineG = null; }
+  var oldBest = arcadeHigh('vine');
+  var isBest = setArcadeHigh('vine', G.score);
+  var extra = arcadeUnlockLines([VINE_COLORS], oldBest, arcadeHigh('vine'));
+  var over = el('vine-over');
+  if (!over) return;
+  over.innerHTML = arcadeOverHtml('vine', G.score, 'drops', isBest, extra);
+  over.hidden = false;
+  wireArcadeOver(over, startVineRun);
+  if (isBest) {
+    try { celebrate({ emoji: '🌿', title: 'New best vine!', sub: fmtNum(G.score) + ' drops — alhamdulillah!' }); } catch (e) {}
+  }
+}
+function startVineRun() {
+  var attempt = arcadeStartDeduct('vine');
+  if (!attempt) return;
+  var wrap = el('vine-wrap');
+  if (wrap) wrap.hidden = false;
+  var side = (wrap && wrap.clientWidth) || 340;
+  var setup = arcadeCanvas('vine-wrap', 'vine-canvas', side);
+  if (!setup) return;
+  stopArcade();
+  arcadeShowRun('vine-wrap', 'vine-over', 'vine-start-card');
+  var canvas = setup.canvas;
+  var N = 17, cell = setup.W / N;
+  var G = {
+    ctx: setup.ctx, W: setup.W, H: setup.W, N: N, cell: cell,
+    rng: sproutRng(attempt * 224737 + 11),
+    snake: [{ x: 8, y: 8 }, { x: 7, y: 8 }, { x: 6, y: 8 }],
+    dir: { x: 1, y: 0 }, queue: [], drop: null,
+    score: 0, acc: 0, tick: 175, over: false, raf: 0,
+    color: colorOptById(VINE_COLORS, S.vineColor).color || '#4caf50',
+    pdown: null
+  };
+  G.drop = vineDrop(G);
+  vineG = G;
+  canvas.onpointerdown = function (e) {
+    G.pdown = { x: e.clientX, y: e.clientY };
+    if (e.preventDefault) e.preventDefault();
+  };
+  canvas.onpointerup = function (e) {
+    if (!G.pdown || vineG !== G || G.over) { G.pdown = null; return; }
+    var dx = e.clientX - G.pdown.x, dy = e.clientY - G.pdown.y;
+    G.pdown = null;
+    if (Math.hypot(dx, dy) < 24) {
+      try {
+        var r = canvas.getBoundingClientRect();
+        var hx = (G.snake[0].x + 0.5) * G.cell;
+        vineTurn(G, (e.clientX - r.left) < hx ? -1 : 1);
+      } catch (err) {}
+    } else if (Math.abs(dx) > Math.abs(dy)) {
+      vineQueueDir(G, { x: dx > 0 ? 1 : -1, y: 0 });
+    } else {
+      vineQueueDir(G, { x: 0, y: dy > 0 ? 1 : -1 });
+    }
+    if (e.preventDefault) e.preventDefault();
+  };
+  G.last = nowMs();
+  (function kick() {
+    if (!vineG || vineG !== G || G.over) return;
+    var t = nowMs(), dt = t - G.last;
+    G.last = t;
+    if (dt > 250) dt = 250;
+    if (dt < 0) dt = 0;
+    G.acc += dt;
+    while (G.acc >= G.tick && !G.over) { G.acc -= G.tick; vineTick(G); }
+    vineDraw(G);
+    if (!G.over) G.raf = requestAnimationFrame(kick);
+  })();
+}
+
+/* ---------------- ARCADE screens ---------------- */
 function renderGame() {
   var sec = el('screen-game');
   if (!sec) return;
-  stopSprout();
-  var skin = sproutSkin();
-  var eq = sproutCostumeById(S.sproutEquipped);
-  var canAfford = (Number(S.credits) || 0) >= SPROUT_COST;
+  stopArcade();
+  if (arcadeScreen === 'sprout') renderSproutScreen(sec);
+  else if (arcadeScreen === 'flip') renderFlipScreen(sec);
+  else if (arcadeScreen === 'firefly') renderFireflyScreen(sec);
+  else if (arcadeScreen === 'vine') renderVineScreen(sec);
+  else renderArcadeMenu(sec);
+}
+
+function renderArcadeMenu(sec) {
   var html = '<button class="backlink" data-go="home">← Home</button>' +
-    '<span class="kicker k-sage">Skill game · no luck, just you</span>' +
-    '<h1 class="giant">' + esc(skin.name) + '</h1>' +
-    '<p class="lede">Sprout bounces on his own — press and slide your finger anywhere in the play area to steer. ' +
-    'Climb as high as you can; the run ends if you fall.</p>';
-
-  html += '<div class="card"><div class="row-between"><div><span class="kicker k-gold">🪙 Adhkar credits</span>' +
-    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.credits) + '</div></div>' +
-    '<div style="text-align:right"><span class="kicker k-sage">Best climb</span>' +
-    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.sproutHigh) + '</div></div></div>' +
-    '<p class="muted" style="margin:8px 0 0">Each climb costs ' + SPROUT_COST + ' credits, earned from morning &amp; evening adhkar.</p></div>';
-
-  html += '<div class="card"><span class="kicker k-sage">Sprout&rsquo;s wardrobe</span><div class="costume-grid">';
-  for (var i = 0; i < SPROUT_COSTUMES.length; i++) {
-    (function (c) {
-      var owned = S.sproutCostumes.indexOf(c.id) !== -1;
-      var active = S.sproutEquipped === c.id;
-      html += '<button class="costume' + (active ? ' active' : '') + '" data-costume="' + c.id + '"' + (owned ? '' : ' disabled') + '>' +
-        '<span class="costume-emoji">' + (owned ? c.emoji : '🔒') + '</span>' +
-        '<b>' + esc(c.name) + '</b>' +
-        '<i>' + (owned ? (active ? 'Wearing' : 'Tap to wear') : 'Score ' + fmtNum(c.at)) + '</i></button>';
-    })(SPROUT_COSTUMES[i]);
+    '<span class="kicker k-sage">Skill games · no luck, just you</span>' +
+    '<h1 class="giant">Adhkar Arcade</h1>' +
+    '<p class="lede">Spend the coins you earned from morning &amp; evening adhkar. Each attempt costs ' +
+    GAME_COST + ' coins.</p>';
+  html += arcadeBalanceCard();
+  html += '<div class="arcade-grid">';
+  for (var i = 0; i < ARCADE_GAMES.length; i++) {
+    (function (gm) {
+      var best = arcadeHigh(gm.id);
+      var unit = (gm.id === 'sprout' || gm.id === 'flip') ? 'm' : 'pts';
+      html += '<div class="card arcade-card"><div style="font-size:2.2rem">' + gm.emoji + '</div>' +
+        '<h3>' + esc(gm.name) + '</h3><p class="muted">' + esc(gm.tag) + '</p>' +
+        '<div class="arcade-best">Best: <b>' + fmtNum(best) + '</b> ' + unit + '</div>' +
+        '<button class="btn-gold" data-arcade-open="' + gm.id + '">Play · ' + GAME_COST + ' 🪙</button></div>';
+    })(ARCADE_GAMES[i]);
   }
-  html += '</div></div>';
-
-  html += '<div class="card sprout-wrap" id="sprout-wrap" hidden>' +
-    '<canvas id="sprout-canvas" class="sprout-canvas"></canvas>' +
-    '<div class="sprout-over" id="sprout-over" hidden></div></div>';
-
-  html += '<div class="card" style="text-align:center" id="sprout-start-card">' +
-    '<div style="font-size:2.4rem">' + eq.emoji + '</div>' +
-    '<p class="muted">Ready, ' + esc(eq.name) + '?</p>' +
-    '<button class="btn-gold" id="sprout-start"' + (canAfford ? '' : ' disabled') + '>' +
-    (canAfford ? 'Start climb · ' + SPROUT_COST + ' 🪙' : 'Need ' + SPROUT_COST + ' credits to climb') + '</button>' +
-    (canAfford ? '' : '<p class="muted" style="margin-top:8px">Complete morning &amp; evening adhkar to earn credits.</p>') +
-    '</div>';
-
+  html += '</div>';
   sec.innerHTML = html;
-
   var gos = sec.querySelectorAll('[data-go]');
   for (var g = 0; g < gos.length; g++) {
     (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[g]);
   }
-  var cos = sec.querySelectorAll('[data-costume]');
-  for (var k = 0; k < cos.length; k++) {
+  var opens = sec.querySelectorAll('[data-arcade-open]');
+  for (var k = 0; k < opens.length; k++) {
     (function (b) {
-      b.addEventListener('click', function () {
-        var id = b.getAttribute('data-costume');
-        if (S.sproutCostumes.indexOf(id) !== -1) { S.sproutEquipped = id; saveState(); renderGame(); }
-      });
-    })(cos[k]);
+      b.addEventListener('click', function () { arcadeScreen = b.getAttribute('data-arcade-open'); renderGame(); });
+    })(opens[k]);
   }
-  var start = el('sprout-start');
-  if (start && canAfford) start.addEventListener('click', function () { startSproutRun(); });
+}
+
+function arcadeBackBtn() {
+  return '<button class="backlink" data-arcade-back="1">← Arcade</button>';
+}
+function wireArcadeBack(sec) {
+  var bs = sec.querySelectorAll('[data-arcade-back]');
+  for (var i = 0; i < bs.length; i++) {
+    bs[i].addEventListener('click', function () { arcadeScreen = 'menu'; renderGame(); });
+  }
+  var gos = sec.querySelectorAll('[data-go]');
+  for (var g = 0; g < gos.length; g++) {
+    (function (b) { b.addEventListener('click', function () { showScreen(b.getAttribute('data-go')); }); })(gos[g]);
+  }
+}
+
+function renderSproutScreen(sec) {
+  var skin = sproutSkin();
+  var eq = sproutCostumeById(S.sproutEquipped);
+  var best = arcadeHigh('sprout');
+  var html = arcadeBackBtn() +
+    '<span class="kicker k-sage">Skill game · no luck, just you</span>' +
+    '<h1 class="giant">' + esc(skin.name) + '</h1>' +
+    '<p class="lede">Sprout bounces on his own — press and slide your finger anywhere in the play area to steer. ' +
+    'Quick-tap for one bonus jump per bounce. Watch for moving and breakable platforms, springs, and jetpacks!</p>';
+  html += arcadeBalanceCard();
+  html += '<div class="card"><div class="row-between"><div><span class="kicker k-sage">Best climb</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(best) + ' m</div></div></div></div>';
+  html += customGrid('Sprout&rsquo;s wardrobe', SPROUT_COSTUMES, S.sproutEquipped, best, 'sprout:costume');
+  html += '<div class="card sprout-wrap" id="sprout-wrap" hidden>' +
+    '<canvas id="sprout-canvas" class="sprout-canvas game-canvas"></canvas>' +
+    '<div class="sprout-over" id="sprout-over" hidden></div></div>';
+  html += arcadeStartCard('sprout', eq.emoji, 'Ready, ' + esc(eq.name) + '?', 'sprout-start-card');
+  sec.innerHTML = html;
+  wireArcadeBack(sec);
+  wireCustom(sec, function (spec) {
+    var parts = spec.split(':');
+    var c = sproutCostumeById(parts[2]);
+    if (best >= c.at) { S.sproutEquipped = c.id; saveState(); renderGame(); }
+  });
+  var start = el('sprout-start-card-btn');
+  if (start && !start.disabled) start.addEventListener('click', startSproutRun);
+}
+
+function renderFlipScreen(sec) {
+  var best = arcadeHigh('flip');
+  var fc = S.flipCustom;
+  var html = arcadeBackBtn() +
+    '<span class="kicker k-sage">Skill game · no luck, just you</span>' +
+    '<h1 class="giant">🌀 Flip Runner</h1>' +
+    '<p class="lede">Your runner sprints on his own — <b>tap anywhere to flip gravity</b> and run on the ceiling. ' +
+    'Dodge gaps and spikes. New shirt, shoe, and hat styles unlock every 1,000 m of best distance.</p>';
+  html += arcadeBalanceCard();
+  html += '<div class="card"><div class="row-between"><div><span class="kicker k-sage">Best run</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(best) + ' m</div></div></div></div>';
+  html += customGrid('Shirts', FLIP_SHIRTS, fc.shirt, best, 'flip:shirt');
+  html += customGrid('Shoes', FLIP_SHOES, fc.shoes, best, 'flip:shoes');
+  html += customGrid('Hats', FLIP_HATS, fc.hat, best, 'flip:hat');
+  html += '<div class="card sprout-wrap" id="flip-wrap" hidden>' +
+    '<canvas id="flip-canvas" class="sprout-canvas game-canvas"></canvas>' +
+    '<div class="sprout-over" id="flip-over" hidden></div></div>';
+  html += arcadeStartCard('flip', '🌀', 'Ready to run?', 'flip-start-card');
+  sec.innerHTML = html;
+  wireArcadeBack(sec);
+  wireCustom(sec, function (spec) {
+    var parts = spec.split(':'); // flip:shirt:fs-gold
+    var slot = parts[1], id = parts[2];
+    var list = slot === 'shirt' ? FLIP_SHIRTS : slot === 'shoes' ? FLIP_SHOES : FLIP_HATS;
+    var opt = flipOptById(list, id);
+    if (best >= opt.at) { S.flipCustom[slot] = id; saveState(); renderGame(); }
+  });
+  var start = el('flip-start-card-btn');
+  if (start && !start.disabled) start.addEventListener('click', startFlipRun);
+}
+
+function renderFireflyScreen(sec) {
+  var best = arcadeHigh('firefly');
+  var html = arcadeBackBtn() +
+    '<span class="kicker k-sage">Skill game · no luck, just you</span>' +
+    '<h1 class="giant">✨ Firefly Flight</h1>' +
+    '<p class="lede"><b>Tap anywhere to flap</b> through the garden arches — one point per arch. ' +
+    'The arches narrow and speed up as you score. New glow colors unlock at score milestones.</p>';
+  html += arcadeBalanceCard();
+  html += '<div class="card"><div class="row-between"><div><span class="kicker k-sage">Best flight</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(best) + ' arches</div></div></div></div>';
+  html += customGrid('Glow colors', FIREFLY_GLOWS, S.fireflyGlow, best, 'firefly:glow');
+  html += '<div class="card sprout-wrap" id="firefly-wrap" hidden>' +
+    '<canvas id="firefly-canvas" class="sprout-canvas game-canvas"></canvas>' +
+    '<div class="sprout-over" id="firefly-over" hidden></div></div>';
+  html += arcadeStartCard('firefly', '✨', 'Ready to fly?', 'firefly-start-card');
+  sec.innerHTML = html;
+  wireArcadeBack(sec);
+  wireCustom(sec, function (spec) {
+    var id = spec.split(':')[2];
+    var opt = colorOptById(FIREFLY_GLOWS, id);
+    if (best >= opt.at) { S.fireflyGlow = id; saveState(); renderGame(); }
+  });
+  var start = el('firefly-start-card-btn');
+  if (start && !start.disabled) start.addEventListener('click', startFireflyRun);
+}
+
+function renderVineScreen(sec) {
+  var best = arcadeHigh('vine');
+  var html = arcadeBackBtn() +
+    '<span class="kicker k-sage">Skill game · no luck, just you</span>' +
+    '<h1 class="giant">🌿 Vine Snake</h1>' +
+    '<p class="lede"><b>Swipe to steer</b>, or tap the left/right side to turn. Guide your growing vine to the water drops ' +
+    'without tangling yourself — every drop speeds you up. New vine colors unlock at score milestones.</p>';
+  html += arcadeBalanceCard();
+  html += '<div class="card"><div class="row-between"><div><span class="kicker k-sage">Best vine</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(best) + ' drops</div></div></div></div>';
+  html += customGrid('Vine colors', VINE_COLORS, S.vineColor, best, 'vine:color');
+  html += '<div class="card sprout-wrap" id="vine-wrap" hidden>' +
+    '<canvas id="vine-canvas" class="sprout-canvas game-canvas"></canvas>' +
+    '<div class="sprout-over" id="vine-over" hidden></div></div>';
+  html += arcadeStartCard('vine', '🌿', 'Ready to grow?', 'vine-start-card');
+  sec.innerHTML = html;
+  wireArcadeBack(sec);
+  wireCustom(sec, function (spec) {
+    var id = spec.split(':')[2];
+    var opt = colorOptById(VINE_COLORS, id);
+    if (best >= opt.at) { S.vineColor = id; saveState(); renderGame(); }
+  });
+  var start = el('vine-start-card-btn');
+  if (start && !start.disabled) start.addEventListener('click', startVineRun);
 }
 
 /* ---------------- navigation wiring ---------------- */
@@ -2530,6 +3702,7 @@ window.addEventListener('dg-content-ready', refreshContent);
 
 /* ---------------- boot ---------------- */
 function boot() {
+  try { migrateChecklistKeys(); } catch (e) { /* migration optional */ }
   try { refreshPrayers(); } catch (e) { /* prayers optional */ }
   try { applyAmbience(); } catch (e) { /* ambience optional */ }
   wireNav();

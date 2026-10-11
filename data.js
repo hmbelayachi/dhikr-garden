@@ -94,15 +94,6 @@ const DG_SHARED = [
     note: null
   },
   {
-    id: "raditu-billahi",
-    credits: 2,
-    arabic: "رَضِيتُ بِاللهِ رَبًّا وَبِالْإِسْلَامِ دِينًا وَبِمُحَمَّدٍ صَلَّى اللهُ عَلَيْهِ وَسَلَّمَ نَبِيًّا",
-    transliteration: "Raditu billahi rabba, wa bil-islami dina, wa bi-Muhammadin sallallahu ^alayhi wa sallam nabiyya",
-    translation: "I am pleased with Allah as my Lord, with Islam as my religion, and with Muhammad ﷺ as my Prophet.",
-    count: "3x",
-    note: "Said three times."
-  },
-  {
     id: "subhanallahi-wa-bihamdihi-am",
     credits: 3,
     arabic: "سُبْحَانَ اللهِ وَبِحَمْدِهِ",
@@ -162,17 +153,8 @@ const DG_MORNING_ONLY = [
   }
 ];
 
-/* Evening-only remembrances (2) */
+/* Evening-only remembrances (1) */
 const DG_EVENING_ONLY = [
-  {
-    id: "bika-amsayna",
-    credits: 2,
-    arabic: "اللَّهُمَّ بِكَ أَمْسَيْنَا وَبِكَ أَصْبَحْنَا وَبِكَ نَحْيَا وَبِكَ نَمُوتُ وَإِلَيْكَ الْمَصِيرُ",
-    transliteration: "Allahumma bika amsayna, wa bika asbahna, wa bika nahya, wa bika namut, wa ilaykal-masir",
-    translation: "O Allah, by You we enter the evening and by You we enter the morning; by You we live and by You we die, and to You is the return.",
-    count: null,
-    note: "Said in the evening."
-  },
   {
     id: "amsayna",
     credits: 3,
@@ -453,6 +435,112 @@ window.DG_CONTENT = {
     morning: DG_MORNING_ONLY.concat(DG_SHARED),
     evening: DG_EVENING_ONLY.concat(DG_MORNING_ONLY.slice(1), DG_SHARED)
   },
+
+  /* Per-item recitation audio (relative paths; lazy-loaded on first tap).
+     Items without an entry here are ungated (checkbox works immediately). */
+  audioMap: {
+    "ya-hayyu-ya-qayyum": "audio/ya-hayyu-ya-qayyum.mp3",
+    "ayat-al-kursi": "audio/ayat-al-kursi.mp3",
+    "hasbiyallah": "audio/hasbiyallah.mp3",
+    "muawwidhat-ikhlas": "audio/muawwidhat-ikhlas.mp3",
+    "muawwidhat-falaq": "audio/muawwidhat-falaq.mp3",
+    "muawwidhat-nas": "audio/muawwidhat-nas.mp3",
+    "la-ilaha-wahdahu": "audio/la-ilaha-wahdahu.mp3",
+    "ushhiduk": "audio/ushhiduk.mp3",
+    "alim-al-ghayb": "audio/alim-al-ghayb.mp3",
+    "sayyid-istighfar": "audio/sayyid-istighfar.mp3"
+  },
+
+  /* Morning/evening checklist levels. itemIds lists checklist item ids;
+     null = the full checklist. creditMult scales per-item credit rewards. */
+  rhythmLevels: [
+    {
+      id: "beginner",
+      name: "Beginner",
+      desc: "The last three surahs plus Ayat al-Kursi.",
+      creditMult: 1,
+      itemIds: ["muawwidhat-ikhlas", "muawwidhat-falaq", "muawwidhat-nas", "ayat-al-kursi"]
+    },
+    {
+      id: "beginner-na",
+      name: "Beginner (non-Arabic speaker)",
+      desc: "Two short, powerful remembrances.",
+      creditMult: 1,
+      itemIds: ["bismillahil-ladhi", "hasbiyallah"]
+    },
+    {
+      id: "intermediate",
+      name: "Intermediate",
+      desc: "Both beginner sets together.",
+      creditMult: 2,
+      itemIds: ["muawwidhat-ikhlas", "muawwidhat-falaq", "muawwidhat-nas", "ayat-al-kursi",
+                "bismillahil-ladhi", "hasbiyallah"]
+    },
+    {
+      id: "expert",
+      name: "Expert",
+      desc: "The full morning & evening checklist.",
+      creditMult: 3,
+      itemIds: null
+    }
+  ],
+
+  /* Learn menu reading library (the separate Articles section is untouched). */
+  learnArticles: [
+    { group: "dear-youth", id: "dy1", title: "Dear Youth – Session 1",
+      url: "https://www.aicp.org/index.php/islamic-information/text/english/31-dear-youth-session-1",
+      summary: "Belief in God and the Prophets; God's attributes; Islam is for every person." },
+    { group: "dear-youth", id: "dy2", title: "Dear Youth – Session 2",
+      url: "https://aicp.org/index.php/islamic-information/text/english/32-dear-youth-session-2",
+      summary: "God is not like creation; the story of Prophet Adam; review Q&A." },
+    { group: "dear-youth", id: "dy3", title: "Dear Youth – Session 3",
+      url: "https://aicp.org/index.php/islamic-information/text/english/33-dear-youth-session-3",
+      summary: "Hardship as an opportunity for reward; blasphemy vs. lesser sins." },
+    { group: "dear-youth", id: "dy4", title: "Dear Youth – Session 4",
+      url: "https://www.aicp.org/index.php/islamic-information/text/english/34-dear-youth-session-4",
+      summary: "God exists without a place; success in school and kindness to parents." },
+    { group: "dear-youth", id: "dy5", title: "Dear Youth – Session 5",
+      url: "https://www.aicp.org/index.php/islamic-information/text/english/35-dear-youth-session-5",
+      summary: "The purpose of creation is worship; revelation comes only to Prophets." },
+    { group: "dear-youth", id: "dy6", title: "Dear Youth – Session 6",
+      url: "https://www.aicp.org/index.php/islamic-information/text/english/36-dear-youth-session-6",
+      summary: "Don't waste time; sit in circles of knowledge; learn the obligatory knowledge." },
+    { group: "dear-youth", id: "dy7", title: "Dear Youth – Session 7",
+      url: "https://www.aicp.org/index.php/islamic-information/text/english/37-dear-youth-session-7",
+      summary: "24 quiz questions reviewing the sessions." },
+    { group: "dear-youth", id: "dy8", title: "Dear Youth – Session 8",
+      url: "https://aicp.org/index.php/islamic-information/text/english/38-dear-youth-session-8",
+      summary: "Prophet Idris; patience along with belief leads to success." },
+    { group: "dhikr", id: "benefits-dhikr", title: "The Benefits of Remembering Allah",
+      url: "https://aicp.org/index.php/islamic-information/text/english/74-the-benefits-of-remembering-allah",
+      summary: "Types of dhikr; virtues of phrases; istighfar; counting dhikr on fingers." },
+    { group: "dhikr", id: "means-forgiveness", title: "Means of Forgiveness",
+      url: "https://aicp.org/index.php/islamic-information/text/2015-06-04-14-26-04/714-2021-01-26-20-57-54",
+      summary: "Repentance; the market dhikr; the morning dhikr of accepting Allah as Lord." },
+    { group: "dhikr", id: "good-deeds", title: "The Good Deeds Remove the Bad Deeds",
+      url: "https://aicp.org/index.php/islamic-information/text/english/83-the-good-deeds-remove-the-bad-deeds",
+      summary: "100 tasbih erases 1,000 sins; sincerity of intention; valid creed." },
+    { group: "character", id: "pros-cons-internet", title: "Pros & Cons of Internet",
+      url: "https://aicp.org/index.php/islamic-information/text/english/767-pros-cons-of-internet",
+      summary: "Social-media addiction, neglecting prayer and parents, scams, gaming addiction." },
+    { group: "character", id: "merciful-youngsters", title: "Be Merciful To Your Youngsters",
+      url: "https://aicp.org/index.php/islamic-information/audio/english/795-be-merciful-to-your-youngsters",
+      summary: "Mercy toward children; the Prophet's mercy with Hadith examples." },
+    { group: "character", id: "praised-manners", title: "Prophet Muhammad's Praised Manners",
+      url: "https://aicp.org/index.php/islamic-information/text/english/57-prophet-muhammad-s-praised-manners",
+      summary: "Humility, mercy, generosity, truthfulness." },
+    { group: "character", id: "thanking-bounties", title: "The Greatness of Thanking Allah for His Bounties",
+      url: "https://aicp.org/index.php/islamic-information/text/english/770-the-greatness-of-thanking-allah-for-his-bounties",
+      summary: "Gratitude means refraining from disobedience with His bounties." },
+    { group: "character", id: "trust-fortune", title: "Trusting God and Warning Against Fortune Tellers",
+      url: "https://aicp.org/index.php/islamic-information/text/2015-06-04-14-26-04/718-2021-01-28-01-19-14",
+      summary: "Trust in God; warning against fortune tellers." }
+  ],
+  learnArticleGroups: [
+    { id: "dear-youth", name: "Dear Youth", desc: "Eight sessions written for young readers." },
+    { id: "dhikr", name: "Dhikr & Repentance", desc: "Remembrance and turning back to Allah." },
+    { id: "character", name: "Character & Motivation", desc: "Manners, gratitude, and staying on the path." }
+  ],
 
   milestones: {
     perDhikr: [100, 500, 1000],

@@ -670,3 +670,55 @@ body[data-theme="mine"].amb-night     { background: #080604; }
 .costume-emoji { font-size: 2rem; line-height: 1.2; }
 .costume b { font-size: .85rem; }
 .costume i { font-style: normal; font-size: .72rem; color: var(--sage); font-weight: 700; }
+
+/* ================= v11 additions ================= */
+
+/* ---- rhythm level selector ---- */
+.lvl-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.lvl-btn {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  background: var(--inset); border: 2px solid var(--border); border-radius: 14px;
+  padding: 12px; cursor: pointer; font-family: var(--font-latin); color: var(--cream);
+  text-align: left; touch-action: manipulation;
+}
+.lvl-btn b { font-size: .92rem; }
+.lvl-btn i { font-style: normal; font-size: .74rem; color: var(--sage); font-weight: 700; line-height: 1.35; }
+.lvl-mult { font-size: .72rem; font-weight: 900; color: var(--gold); margin-top: 4px; }
+.lvl-btn.active { border-color: var(--gold); box-shadow: 0 0 0 1px var(--gold); }
+
+/* ---- shaded (locked) checklist rows ---- */
+.check-row.shaded { opacity: .55; }
+.check-row.shaded .bigcheck { cursor: not-allowed; }
+.check-row.shaded .bigcheck:disabled { opacity: .6; }
+.lock-note { font-size: .78rem; color: var(--sage); font-weight: 700; margin-top: 8px; line-height: 1.4; }
+.gate-note { border-color: rgba(127, 181, 232, .4); }
+
+/* ---- per-item recitation audio ---- */
+.audio-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+.aplay {
+  flex: 0 0 auto; border: 2px solid var(--gold); background: rgba(227, 169, 60, .12);
+  color: var(--gold); font-family: var(--font-latin); font-weight: 900; font-size: .85rem;
+  border-radius: 99px; padding: 10px 16px; min-height: 44px; cursor: pointer; touch-action: manipulation;
+}
+.aplay:disabled { opacity: .45; cursor: default; }
+.aprog { flex: 1; height: 8px; background: rgba(255, 255, 255, .08); border-radius: 99px; overflow: hidden; }
+.aprog i { display: block; height: 100%; width: 0; background: var(--gold); border-radius: 99px; transition: width .25s linear; }
+.alistened { flex: 0 0 auto; font-size: .74rem; color: var(--gold); font-weight: 900; white-space: nowrap; }
+
+/* ---- arcade ---- */
+.arcade-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+.arcade-card { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.arcade-card h3 { margin: 0; font-size: 1.05rem; }
+.arcade-card .muted { margin: 0; font-size: .8rem; }
+.arcade-best { font-size: .85rem; color: var(--sage); font-weight: 700; }
+.arcade-best b { color: var(--gold); font-weight: 900; }
+.arcade-card .btn-gold { width: 100%; margin-top: 4px; }
+.game-canvas { width: 100%; border-radius: 16px; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
+.swatch {
+  display: inline-block; width: 2rem; height: 2rem; border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, .35); line-height: 1.2;
+}
+@media (max-width: 380px) {
+  .arcade-grid { grid-template-columns: 1fr; }
+  .lvl-grid { grid-template-columns: 1fr; }
+}
