@@ -636,58 +636,6 @@ window.DG_CONTENT = {
     }
   ],
 
-  articles: [
-    {
-      id: "benefits-of-remembering-allah",
-      title: "The Benefits of Remembering Allah",
-      description: "An article on what remembrance is, its types and their ranks, the best forms of seeking forgiveness, and how to count your remembrances.",
-      url: "https://www.aicp.org/index.php/islamic-information/text/english/74-the-benefits-of-remembering-allah",
-      embed: true
-    },
-    {
-      id: "dear-youth-session-1",
-      title: "Dear Youth – Session 1",
-      description: "Written for young readers: the proper belief in God and His prophets, plus the story of Prophet Adam.",
-      url: "https://www.aicp.org/index.php/islamic-information/text/english/31-dear-youth-session-1",
-      embed: true
-    },
-    {
-      id: "islam-true-religion",
-      title: "Islam, The True Religion",
-      description: "The full overview: belief in Allah, His messengers, the Day of Judgment, Paradise and Hellfire.",
-      url: "https://www.aicp.org/SupportingDocs/Islam.pdf",
-      embed: false
-    },
-    {
-      id: "essentials-of-belief",
-      title: "The Essentials of Belief",
-      description: "The Two Professions, Allah's oneness and attributes, and belief in all the prophets with following Prophet Muhammad.",
-      url: "https://www.aicp.org/index.php/islamic-information/text/english/78-the-essentials-of-belief",
-      embed: true
-    },
-    {
-      id: "creed-of-at-tahawiyy",
-      title: "The Creed of at-Tahawiyy",
-      description: "The classical Sunni creed: belief in Allah and that Muhammad is His servant, Messenger, and the Seal of the Prophets.",
-      url: "https://www.aicp.org/index.php/islamic-information/text/english/77-the-creed-of-at-tahawiyy",
-      embed: true
-    },
-    {
-      id: "supplement-al-aqidah-al-murshidah",
-      title: "The Supplement to Al-^Aqidah Al-Murshidah",
-      description: "On the Messenger: his lineage, his rank as the best of creation, and what belief in him entails.",
-      url: "https://aicp.org/index.php/islamic-information/text/english/100-the-supplement-to-al-aqidah-al-murshidah",
-      embed: true
-    },
-    {
-      id: "glossary",
-      title: "Glossary of Islamic Terms",
-      description: "Definitions of dhikr vocabulary such as tasbih, tahmid, takbir, and tahlil.",
-      url: "https://aicp.org/index.php/islamic-information/text/english/541-glossary",
-      embed: true
-    }
-  ],
-
   studySections: [
     {
       id: "counting",

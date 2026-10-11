@@ -5,8 +5,8 @@
    The app tolerates it being missing/partial, and reads BOTH key families:
 
    Provisional keys:  dhikr[], unlockStages[] (+dhikrIds), tahlilSpecials{},
-                      secret{}, daily{morning[],evening[]}, articles[]
-                      ({title,url,excerpt}), gettingStarted[], seasons[]
+                      secret{}, daily{morning[],evening[]},
+                      gettingStarted[], seasons[]
                       ({hijriMonths[],greeting}), generalPresets[],
                       per-dhikr dhikr[].milestones{cumulative{},single{}}.
 
@@ -21,7 +21,6 @@
                         secret{name,emoji,rarity,threshold} },
                       dailyRhythm{morning[],evening[]} ({arabic,
                         transliteration,translation,count}),
-                      articles[] ({title,description,url,embed}),
                       seasons[] ({name,hijriMonth,description}),
                       gettingStarted[] ({title,body}).
 
@@ -92,10 +91,6 @@ function getDaily() {
     morning: Array.isArray(d.morning) ? d.morning : [],
     evening: Array.isArray(d.evening) ? d.evening : []
   };
-}
-function getArticles() {
-  var a = Array.isArray(D.articles) ? D.articles : [];
-  return a.filter(function (x) { return x && (x.title || x.url); });
 }
 function getSteps() {
   var th = themeDef(currentTheme());
@@ -1200,7 +1195,7 @@ function dhikrLocked(dh) {
 }
 
 /* ---------------- UI primitives ---------------- */
-var SCREENS = ['home', 'practice', 'daily', 'learn', 'herbarium', 'articles', 'reader', 'progress', 'game', 'getting-started'];
+var SCREENS = ['home', 'practice', 'daily', 'learn', 'herbarium', 'reader', 'progress', 'game', 'getting-started'];
 var currentScreen = 'home';
 
 function showScreen(name) {
@@ -1218,7 +1213,7 @@ function showScreen(name) {
   try { window.scrollTo(0, 0); } catch (e) { /* scroll optional */ }
   try {
     var fn = { home: renderHome, practice: renderPractice, daily: renderDaily,
-               learn: renderLearn, herbarium: renderHerbarium, articles: renderArticles,
+               learn: renderLearn, herbarium: renderHerbarium,
                reader: function () {}, progress: renderProgress, game: renderGame, 'getting-started': renderGettingStarted }[name];
     if (fn) fn();
   } catch (e) { /* a screen must never break navigation */ }
@@ -1411,7 +1406,6 @@ var SEC_ICONS = {
   daily: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/><path d="M9 15l2 2 4-4"/></svg>',
   learn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19V5a2 2 0 0 1 2-2h13v16H6a2 2 0 0 0-2 2zm0 0a2 2 0 0 0 2 2h13"/></svg>',
   herbarium: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21v-8"/><path d="M12 13c0-3.5 2.5-6 6-6 0 3.5-2.5 6-6 6z"/><path d="M12 13c0-3.5-2.5-6-6-6 0 3.5 2.5 6 6 6z"/></svg>',
-  articles: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v15a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/><path d="M14 2v6h6M9 13h7M9 17h7"/></svg>',
   progress: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
   game: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="11" rx="5"/><path d="M7 11v4M5 13h4"/><circle cx="16" cy="11.5" r="1" fill="currentColor"/><circle cx="18.5" cy="14" r="1" fill="currentColor"/></svg>'
 };
@@ -1441,7 +1435,6 @@ function sectionGrid() {
     ['daily', 'Daily rhythm', 'Morning & evening', '#f0a05a'],
     ['learn', 'Learn', getLearnArticles().length + ' articles', '#7fb5e8'],
     ['herbarium', T('collection', 'Herbarium'), herbProg.known + '/' + herbProg.total + ' discovered', '#e08ac0'],
-    ['articles', 'Articles', getArticles().length + ' pages', '#f0a05a'],
     ['progress', 'Progress', fmtNum(S.lifetime) + ' lifetime', '#7fb5e8'],
     ['game', 'Adhkar Arcade', '4 games · ' + fmtNum(S.credits) + ' coins', '#9fe0b8']
   ];
@@ -2470,44 +2463,9 @@ function renderHerbarium() {
   wireReplantReleases(sec);
 }
 
-/* ---------------- ARTICLES ---------------- */
+/* ---------------- READER (Learn articles) ---------------- */
 var readerArticle = null;
-var readerBackScreen = 'articles'; // 'articles' | 'learn'
-
-function renderArticles() {
-  var sec = el('screen-articles');
-  if (!sec) return;
-  var arts = getArticles();
-  var html = '<h1 class="page-title">📰 Articles</h1>' +
-    '<p class="page-sub">Read and learn at your own pace.</p>';
-  if (!arts.length) {
-    html += '<div class="card"><div class="empty-note">Articles are being prepared —<br>check back soon 🌱</div></div>';
-  } else {
-    for (var i = 0; i < arts.length; i++) {
-      (function (a, idx) {
-        var excerpt = a.excerpt || a.description || '';
-        html += '<div class="card article-card" data-idx="' + idx + '" role="button" tabindex="0">' +
-          '<h3>📄 ' + esc(a.title || 'Article') + '</h3>' +
-          (excerpt ? '<p class="muted">' + esc(excerpt) + '</p>' : '') +
-          '<span class="muted">Tap to read →</span></div>';
-      })(arts[i], i);
-    }
-  }
-  sec.innerHTML = html;
-  var cards = sec.querySelectorAll('.article-card');
-  for (var c = 0; c < cards.length; c++) {
-    (function (card) {
-      function open() {
-        readerArticle = getArticles()[Number(card.getAttribute('data-idx'))];
-        readerBackScreen = 'articles';
-        renderReader();
-        showScreen('reader');
-      }
-      card.addEventListener('click', open);
-      card.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
-    })(cards[c]);
-  }
-}
+var readerBackScreen = 'learn';
 
 function renderReader() {
   var sec = el('screen-reader');
@@ -2515,17 +2473,17 @@ function renderReader() {
   var a = readerArticle;
   if (!a || !a.url) {
     sec.innerHTML = '<h1 class="page-title">📰 Article</h1><div class="card"><div class="empty-note">This article is unavailable.</div>' +
-      '<button class="btn-ghost" data-back>← Back to articles</button></div>';
+      '<button class="btn-ghost" data-back>← Back to Learn</button></div>';
   } else if (a.embed === false) {
     sec.innerHTML = '<h1 class="page-title" style="font-size:1.3rem">📄 ' + esc(a.title || 'Article') + '</h1>' +
-      '<div class="card"><button class="btn-ghost" data-back style="margin-bottom:12px">← All articles</button>' +
+      '<div class="card"><button class="btn-ghost" data-back style="margin-bottom:12px">← Learn</button>' +
       (a.description ? '<p class="muted">' + esc(a.description) + '</p>' : '') +
       '<p class="muted">This article opens in your browser.</p>' +
       '<a class="btn-gold" style="display:block;text-align:center;text-decoration:none" href="' + esc(a.url) +
       '" target="_blank" rel="noopener">Read article ↗</a></div>';
   } else {
     sec.innerHTML = '<h1 class="page-title" style="font-size:1.3rem">📄 ' + esc(a.title || 'Article') + '</h1>' +
-      '<div class="card"><button class="btn-ghost" data-back style="margin-bottom:12px">← All articles</button>' +
+      '<div class="card"><button class="btn-ghost" data-back style="margin-bottom:12px">← Learn</button>' +
       '<iframe class="reader-frame" src="' + esc(a.url) + '" title="' + esc(a.title || 'Article') +
       '" sandbox="allow-scripts allow-same-origin" loading="lazy"></iframe>' +
       '<p class="muted" style="margin-top:10px">Some websites block embedding — if the page is blank, use the button below.</p>' +
@@ -2535,7 +2493,7 @@ function renderReader() {
   var backs = sec.querySelectorAll('[data-back]');
   for (var i = 0; i < backs.length; i++) {
     (function (b) {
-      b.addEventListener('click', function () { showScreen(readerBackScreen === 'learn' ? 'learn' : 'articles'); });
+      b.addEventListener('click', function () { showScreen('learn'); });
     })(backs[i]);
   }
 }
