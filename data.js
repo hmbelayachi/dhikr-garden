@@ -448,7 +448,8 @@ window.DG_CONTENT = {
     "la-ilaha-wahdahu": "audio/la-ilaha-wahdahu.mp3",
     "ushhiduk": "audio/ushhiduk.mp3",
     "alim-al-ghayb": "audio/alim-al-ghayb.mp3",
-    "sayyid-istighfar": "audio/sayyid-istighfar.mp3"
+    "sayyid-istighfar": "audio/sayyid-istighfar.mp3",
+    "bismillahil-ladhi": "audio/bismillahil-ladhi.mp3"
   },
 
   /* Morning/evening checklist levels. itemIds lists checklist item ids;
