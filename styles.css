@@ -713,6 +713,17 @@ body[data-theme="mine"].amb-night     { background: #080604; }
 .arcade-best { font-size: .85rem; color: var(--sage); font-weight: 700; }
 .arcade-best b { color: var(--gold); font-weight: 900; }
 .arcade-card .btn-gold { width: 100%; margin-top: 4px; }
+
+/* home-page arcade picker */
+.home-arcade .arcade-grid { margin-top: 12px; }
+.home-game-card { cursor: pointer; color: inherit; font: inherit; }
+.home-game-card:active { transform: scale(.97); }
+.coin-badge { display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  min-width: 64px; min-height: 64px; padding: 8px 12px; border-radius: 999px;
+  border: 2px solid var(--gold); color: var(--gold); line-height: 1.1; }
+.coin-badge b { font-size: 1.3rem; font-weight: 900; }
+.coin-badge small { font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; }
+.btn-block { display: block; width: 100%; }
 .game-canvas { width: 100%; border-radius: 16px; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
 .swatch {
   display: inline-block; width: 2rem; height: 2rem; border-radius: 50%;

@@ -339,10 +339,10 @@ function migrateChecklistKeys() {
 /* ---------------- ADHKAR ARCADE constants ---------------- */
 var GAME_COST = 5;
 var ARCADE_GAMES = [
-  { id: 'sprout', name: 'Sprout Climb', emoji: '🌱', tag: 'Bounce as high as you can' },
-  { id: 'flip', name: 'Flip Runner', emoji: '🌀', tag: 'Flip gravity, dodge the gaps' },
-  { id: 'firefly', name: 'Firefly Flight', emoji: '✨', tag: 'Flap through the arches' },
-  { id: 'vine', name: 'Vine Snake', emoji: '🌿', tag: 'Grow without tangling' }
+  { id: 'sprout', name: 'Sprout Climb', emoji: '🌱', tag: 'Climb, double-jump & power up' },
+  { id: 'flip', name: 'Flip Runner', emoji: '🌀', tag: 'Flip, dodge & unlock gear' },
+  { id: 'firefly', name: 'Firefly Flight', emoji: '✨', tag: 'Flap through narrowing arches' },
+  { id: 'vine', name: 'Vine Snake', emoji: '🌿', tag: 'Grow, turn & chase water' }
 ];
 function arcadeGameDef(id) {
   for (var i = 0; i < ARCADE_GAMES.length; i++) if (ARCADE_GAMES[i].id === id) return ARCADE_GAMES[i];
@@ -436,13 +436,23 @@ function audioUrlFor(id) {
   var m = (D.audioMap && typeof D.audioMap === 'object') ? D.audioMap : {};
   return m[id] || null;
 }
-function audioListened(id) { return !!(S.audioListened && S.audioListened[id]); }
+/* Listen-in-full unlocks reset each day: the student listens in full each day
+   before checking the item off. Stored per date; old days are pruned. */
+function audioDay() {
+  var k = todayKey();
+  if (!S.audioListened || typeof S.audioListened !== 'object' || Array.isArray(S.audioListened)) S.audioListened = {};
+  if (!S.audioListened[k] || typeof S.audioListened[k] !== 'object') S.audioListened[k] = {};
+  var keys = Object.keys(S.audioListened).sort();
+  while (keys.length > 14) { delete S.audioListened[keys.shift()]; }
+  return S.audioListened[k];
+}
+function audioListened(id) { return !!audioDay()[id]; }
 function needsListen(id) { return !!audioUrlFor(id) && !audioListened(id); }
 function markAudioListened(id) {
-  if (!S.audioListened || typeof S.audioListened !== 'object') S.audioListened = {};
-  if (S.audioListened[id]) return;
-  S.audioListened[id] = 1;
-  safeSet('dg_audio_listened', S.audioListened);
+  var d = audioDay();
+  if (d[id]) return;
+  d[id] = 1;
+  safeSet('dg_audio_listened_v2', S.audioListened);
 }
 function stopOtherAudio(exceptId) {
   Object.keys(audioEls).forEach(function (id) {
@@ -647,7 +657,7 @@ var S = {
   fireflyGlow: safeGet('dg_firefly_glow', 'fg-gold'),
   vineColor: safeGet('dg_vine_color', 'vc-green'),
   rhythmLevel: safeGet('dg_rhythm_level', 'expert'), // checklist level id
-  audioListened: safeGet('dg_audio_listened', {}),   // {itemId:true} — permanent per-device unlock
+  audioListened: safeGet('dg_audio_listened_v2', {}),   // {YYYY-MM-DD:{itemId:1}} — relocks daily
   prayerCache: safeGet('dg_prayer_cache', null)      // {date,lat,lon,fajr,maghrib} ISO strings
 };
 if (typeof S.sessions !== 'number') S.sessions = 0;
@@ -693,7 +703,7 @@ function saveState() {
   safeSet('dg_firefly_glow', S.fireflyGlow);
   safeSet('dg_vine_color', S.vineColor);
   safeSet('dg_rhythm_level', S.rhythmLevel);
-  safeSet('dg_audio_listened', S.audioListened);
+  safeSet('dg_audio_listened_v2', S.audioListened);
   safeSet('dg_prayer_cache', S.prayerCache);
 }
 
@@ -1523,6 +1533,25 @@ function atmosphereCard(now, np, season, hijri) {
   return html + '</div>';
 }
 
+/* Home-page arcade picker: the four games visible up front, tap one to jump in. */
+function homeArcadePanel() {
+  var html = '<section class="card home-arcade"><div class="row-between" style="align-items:center">' +
+    '<div><span class="kicker k-gold">Spend your adhkar credits</span>' +
+    '<h2 style="margin:4px 0 0">Adhkar Arcade</h2></div>' +
+    '<span class="coin-badge"><b>' + fmtNum(S.credits) + '</b><small>coins</small></span></div>' +
+    '<div class="arcade-grid">';
+  for (var i = 0; i < ARCADE_GAMES.length; i++) {
+    (function (gm) {
+      html += '<button class="card arcade-card home-game-card" data-arcade-play="' + gm.id + '">' +
+        '<div style="font-size:2rem">' + gm.emoji + '</div>' +
+        '<h3>' + esc(gm.name) + '</h3><p class="muted">' + esc(gm.tag) + '</p></button>';
+    })(ARCADE_GAMES[i]);
+  }
+  html += '</div><button class="btn-gold btn-block" data-arcade-menu style="margin-top:12px">' +
+    'Open arcade · ' + GAME_COST + ' coins per attempt</button></section>';
+  return html;
+}
+
 function renderHome() {
   var sec = el('screen-home');
   if (!sec) return;
@@ -1577,6 +1606,9 @@ function renderHome() {
   // daily rhythm preview
   html += dailyPreview();
 
+  // arcade picker
+  html += homeArcadePanel();
+
   // explore grid
   html += sectionGrid();
 
@@ -1598,6 +1630,12 @@ function renderHome() {
     (function (b) { b.addEventListener('click', function () { dailyTab = b.getAttribute('data-goto-daily'); showScreen('daily'); }); })(gd[q]);
   wireReplantReleases(sec);
   }
+  var ap = sec.querySelectorAll('[data-arcade-play]');
+  for (var ap_i = 0; ap_i < ap.length; ap_i++) {
+    (function (b) { b.addEventListener('click', function () { arcadeScreen = b.getAttribute('data-arcade-play'); showScreen('game'); }); })(ap[ap_i]);
+  }
+  var am = sec.querySelector('[data-arcade-menu]');
+  if (am) am.addEventListener('click', function () { arcadeScreen = 'menu'; showScreen('game'); });
   var tp = sec.querySelectorAll('[data-theme-pick]');
   for (var tp_i = 0; tp_i < tp.length; tp_i++) {
     (function (b) { b.addEventListener('click', function () { setTheme(b.getAttribute('data-theme-pick')); }); })(tp[tp_i]);
