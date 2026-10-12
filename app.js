@@ -1983,6 +1983,7 @@ function saveGeneral(early) {
 
 /* ---------------- DAILY RHYTHM ---------------- */
 var dailyTab = 'morning';
+var dailyExpanded = { morning: false, evening: false }; // per-tab collapse state for out-of-level adhkar
 
 function checklistDay() {
   var k = todayKey();
@@ -2100,9 +2101,17 @@ function dailyRowsHtml(period, win) {
     if (!it.id) continue;
     (inLevel(it.id) ? inL : outL).push(it);
   }
-  var ordered = inL.concat(outL);
+  var ordered = inL; // in-level first; out-of-level collapse behind a toggle
   var html = '';
   for (i = 0; i < ordered.length; i++) html += dailyRowHtml(ordered[i], period, day, periodOpen);
+  if (outL.length) {
+    var expanded = !!dailyExpanded[period];
+    html += '<button class="more-adhkar-toggle" data-expand-adhkar="' + period + '">' +
+      (expanded ? 'Hide extra adhkar ▲' : 'Show ' + outL.length + ' more adhkar ▼') + '</button>';
+    if (expanded) {
+      for (i = 0; i < outL.length; i++) html += dailyRowHtml(outL[i], period, day, periodOpen);
+    }
+  }
   return html;
 }
 
@@ -2202,6 +2211,7 @@ function wireDaily(sec) {
       b.addEventListener('click', function () {
         S.rhythmLevel = b.getAttribute('data-level');
         safeSet('dg_rhythm_level', S.rhythmLevel);
+        dailyExpanded = { morning: false, evening: false }; // level switch collapses extras again
         stopAllAudio();
         renderDaily();
         toast('Level: ' + rhythmLevelDef().name + ' 🌙');
@@ -2220,6 +2230,12 @@ function wireDaily(sec) {
       });
     })(tabs[t]);
   }
+  var exT = sec.querySelector('[data-expand-adhkar]');
+  if (exT) exT.addEventListener('click', function () {
+    var p = exT.getAttribute('data-expand-adhkar');
+    dailyExpanded[p] = !dailyExpanded[p];
+    renderDaily();
+  });
   var rows = sec.querySelectorAll('.check-row');
   for (var r = 0; r < rows.length; r++) {
     (function (row) {

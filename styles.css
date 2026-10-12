@@ -727,6 +727,12 @@ body[data-theme="mine"].amb-night     { background: #080604; }
 .coin-badge b { font-size: 1.3rem; font-weight: 900; }
 .coin-badge small { font-size: .62rem; letter-spacing: .08em; text-transform: uppercase; }
 .btn-block { display: block; width: 100%; }
+
+/* collapsed out-of-level adhkar toggle */
+.more-adhkar-toggle { display: block; width: 100%; margin: 10px 0 2px; padding: 12px;
+  background: var(--inset); border: 2px dashed var(--border); border-radius: 14px;
+  color: var(--sage); font: inherit; font-weight: 700; cursor: pointer; }
+.more-adhkar-toggle:active { transform: scale(.98); }
 .game-canvas { width: 100%; border-radius: 16px; display: block; touch-action: none; user-select: none; -webkit-user-select: none; }
 .swatch {
   display: inline-block; width: 2rem; height: 2rem; border-radius: 50%;
