@@ -2650,6 +2650,7 @@ function arcadeCancel(G) {
   if (G && G.raf) { try { cancelAnimationFrame(G.raf); } catch (e) {} }
 }
 function stopArcade() {
+  arcadeCountdownClear();
   arcadeCancel(sproutG); arcadeCancel(flipG); arcadeCancel(fireflyG); arcadeCancel(vineG);
   sproutG = flipG = fireflyG = vineG = null;
   try {
@@ -2690,7 +2691,30 @@ function arcadeShowRun(wrapId, overId, startCardId) {
   if (over) over.hidden = true;
   var sc = el(startCardId);
   if (sc) sc.style.display = 'none';
-  try { wrap.scrollIntoView({ block: 'nearest' }); } catch (e) {}
+  try { wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+}
+/* 3-2-1 countdown on the game overlay before the run begins; timers die with stopArcade. */
+var arcadeCountdownTimers = [];
+function arcadeCountdownClear() {
+  for (var i = 0; i < arcadeCountdownTimers.length; i++) { try { clearTimeout(arcadeCountdownTimers[i]); } catch (e) {} }
+  arcadeCountdownTimers = [];
+}
+function arcadeCountdown(overId, beginFn) {
+  arcadeCountdownClear();
+  var over = el(overId);
+  if (!over) { beginFn(); return; }
+  over.hidden = false;
+  var seq = ['3', '2', '1', 'Go!'];
+  (function show(i) {
+    if (i >= seq.length) {
+      over.hidden = true;
+      over.innerHTML = '';
+      beginFn();
+      return;
+    }
+    over.innerHTML = '<div class="countdown-num">' + seq[i] + '</div>';
+    arcadeCountdownTimers.push(setTimeout(function () { show(i + 1); }, i === seq.length - 1 ? 600 : 850));
+  })(0);
 }
 /* shared game-over overlay */
 function arcadeOverHtml(gameId, score, unit, isBest, extraHtml) {
@@ -2998,6 +3022,7 @@ function startSproutRun() {
   for (var i = 0; i < 14; i++) sproutAddPlat(G);
   G.vy = -G.BOUNCE; // launch immediately — the first jump starts with the run
   sproutG = G;
+  G.countdown = true; // input + loop wait for the 3-2-1
   function toX(e) {
     try {
       var r = canvas.getBoundingClientRect();
@@ -3005,6 +3030,7 @@ function startSproutRun() {
     } catch (err) { return G.x; }
   }
   canvas.onpointerdown = function (e) {
+    if (G.countdown) return;
     G.ptr = true; G.ptrX = toX(e);
     G.downT = nowMs(); G.downX = e.clientX; G.downY = e.clientY;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
@@ -3024,17 +3050,21 @@ function startSproutRun() {
     G.ptr = false;
   };
   canvas.onpointercancel = function () { G.ptr = false; };
-  G.last = nowMs();
-  (function kick() {
+  arcadeCountdown('sprout-over', function () {
     if (!sproutG || sproutG !== G || G.over) return;
-    var t = nowMs(), dt = (t - G.last) / 1000;
-    G.last = t;
-    if (dt > 0.05) dt = 0.05;
-    if (dt < 0) dt = 0;
-    sproutStep(G, dt);
-    sproutDraw(G);
-    if (!G.over) G.raf = requestAnimationFrame(kick);
-  })();
+    G.countdown = false;
+    G.last = nowMs();
+    (function kick() {
+      if (!sproutG || sproutG !== G || G.over) return;
+      var t = nowMs(), dt = (t - G.last) / 1000;
+      G.last = t;
+      if (dt > 0.05) dt = 0.05;
+      if (dt < 0) dt = 0;
+      sproutStep(G, dt);
+      sproutDraw(G);
+      if (!G.over) G.raf = requestAnimationFrame(kick);
+    })();
+  });
 }
 
 /* ---------------- FLIP RUNNER (Gravity Guy-style) ----------------
@@ -3206,21 +3236,28 @@ function startFlipRun() {
     }
   };
   flipG = G;
+  G.countdown = true; // input + loop wait for the 3-2-1
   canvas.onpointerdown = function (e) {
     if (e.preventDefault) e.preventDefault();
+    if (G.countdown) return;
     if (flipG === G && !G.over) { G.g *= -1; G.vy = 0; G.grounded = false; }
   };
   G.last = nowMs();
-  (function kick() {
+  arcadeCountdown('flip-over', function () {
     if (!flipG || flipG !== G || G.over) return;
-    var t = nowMs(), dt = (t - G.last) / 1000;
-    G.last = t;
-    if (dt > 0.05) dt = 0.05;
-    if (dt < 0) dt = 0;
-    flipStep(G, dt);
-    flipDraw(G);
-    if (!G.over) G.raf = requestAnimationFrame(kick);
-  })();
+    G.countdown = false;
+    G.last = nowMs();
+    (function kick() {
+      if (!flipG || flipG !== G || G.over) return;
+      var t = nowMs(), dt = (t - G.last) / 1000;
+      G.last = t;
+      if (dt > 0.05) dt = 0.05;
+      if (dt < 0) dt = 0;
+      flipStep(G, dt);
+      flipDraw(G);
+      if (!G.over) G.raf = requestAnimationFrame(kick);
+    })();
+  });
 }
 
 /* ---------------- FIREFLY FLIGHT (Flappy-style) ----------------
@@ -3244,13 +3281,18 @@ function startFireflyRun() {
     glow: colorOptById(FIREFLY_GLOWS, S.fireflyGlow).color || '#ffd94d'
   };
   fireflyG = G;
+  G.countdown = true; // input + loop wait for the 3-2-1
   canvas.onpointerdown = function (e) {
     if (e.preventDefault) e.preventDefault();
+    if (G.countdown) return;
     if (fireflyG === G && !G.over) G.vy = -430;
   };
-  G.last = nowMs();
-  (function kick() {
+  arcadeCountdown('firefly-over', function () {
     if (!fireflyG || fireflyG !== G || G.over) return;
+    G.countdown = false;
+    G.last = nowMs();
+    (function kick() {
+      if (!fireflyG || fireflyG !== G || G.over) return;
     var t = nowMs(), dt = (t - G.last) / 1000;
     G.last = t;
     if (dt > 0.05) dt = 0.05;
@@ -3258,7 +3300,8 @@ function startFireflyRun() {
     fireflyStep(G, dt);
     fireflyDraw(G);
     if (!G.over) G.raf = requestAnimationFrame(kick);
-  })();
+    })();
+  });
 }
 function fireflyStep(G, dt) {
   var speed = Math.min(430, 195 + G.score * 2.4);
@@ -3468,7 +3511,9 @@ function startVineRun() {
   };
   G.drop = vineDrop(G);
   vineG = G;
+  G.countdown = true; // input + loop wait for the 3-2-1
   canvas.onpointerdown = function (e) {
+    if (G.countdown) return;
     G.pdown = { x: e.clientX, y: e.clientY };
     if (e.preventDefault) e.preventDefault();
   };
@@ -3489,18 +3534,22 @@ function startVineRun() {
     }
     if (e.preventDefault) e.preventDefault();
   };
-  G.last = nowMs();
-  (function kick() {
+  arcadeCountdown('vine-over', function () {
     if (!vineG || vineG !== G || G.over) return;
-    var t = nowMs(), dt = t - G.last;
-    G.last = t;
-    if (dt > 250) dt = 250;
-    if (dt < 0) dt = 0;
-    G.acc += dt;
-    while (G.acc >= G.tick && !G.over) { G.acc -= G.tick; vineTick(G); }
-    vineDraw(G);
-    if (!G.over) G.raf = requestAnimationFrame(kick);
-  })();
+    G.countdown = false;
+    G.last = nowMs();
+    (function kick() {
+      if (!vineG || vineG !== G || G.over) return;
+      var t = nowMs(), dt = t - G.last;
+      G.last = t;
+      if (dt > 250) dt = 250;
+      if (dt < 0) dt = 0;
+      G.acc += dt;
+      while (G.acc >= G.tick && !G.over) { G.acc -= G.tick; vineTick(G); }
+      vineDraw(G);
+      if (!G.over) G.raf = requestAnimationFrame(kick);
+    })();
+  });
 }
 
 /* ---------------- ARCADE screens ---------------- */
