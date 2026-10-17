@@ -843,3 +843,16 @@ body[data-theme="mine"].amb-night     { background: #080604; }
 
 /* ---- buddy preview on home ---- */
 .buddy-preview { margin-top: 12px; }
+
+/* v24: companion environment hero — buddy standing large in the selected theme */
+.buddy-env-hero { padding: 0; overflow: hidden; }
+.buddy-env-scene { position: relative; min-height: 300px; display: flex; align-items: flex-end; justify-content: center; }
+.buddy-env-scene > .garden-scene, .buddy-env-scene > .highway-scene, .buddy-env-scene > .mine-scene {
+  position: absolute; inset: 0; height: auto; margin: 0; border: none; border-radius: 0;
+}
+.buddy-env-char { position: relative; z-index: 2; padding: 34px 0 2px; }
+.buddy-env-char .buddy-char { padding: 0; }
+.buddy-emoji { position: relative; }
+.buddy-hatimg { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 3; }
+.buddy-env-plaque { text-align: center; padding: 2px 16px 0; }
+.treasure-img { width: 42px; height: 42px; object-fit: contain; }

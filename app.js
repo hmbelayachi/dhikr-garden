@@ -1592,8 +1592,12 @@ function renderHome() {
   html += '<div class="home-head"><h1 class="giant">Home</h1>' +
     '<span class="today-badge">' + fmtNum(todayCount()) + '<small>today</small></span></div>';
 
-  // buddy preview (compact) — very top of home, above the theme cards
-  try { html += buddyPreviewHtml(); } catch (e) { /* buddy optional */ }
+  // companion environment hero — buddy standing in the selected theme,
+  // very top of home (theme cards follow right below as the switcher)
+  try { html += buddyEnvHeroHtml(); } catch (e) { /* buddy optional */ }
+
+  // theme picker (stays as the theme switcher, right below the hero it switches)
+  html += themePickerCard();
 
   // while-you-were-away (offline maturation notice)
   if (away.length) {
@@ -1604,18 +1608,15 @@ function renderHome() {
       esc(String(away.length)) + ' ' + esc(awayUnit) + ': ' + names + more + '</div>';
   }
 
-  // garden hero
+  // garden hero (stats + tend button; the environment scene now lives in the companion hero above)
   html += '<section class="card garden-hero"><span class="kicker k-sage">' + esc(T('heroKicker', 'Your garden')) + '</span>' +
-    '<h2 class="hero-title">' + esc(T('heroTitle', 'What you remember, grows.')) + '</h2>' + heroScene() +
+    '<h2 class="hero-title">' + esc(T('heroTitle', 'What you remember, grows.')) + '</h2>' +
     '<div class="hero-lines"><div><b>' + discovered + '/' + totalKeys + '</b> ' + esc(T('milestoneUnit', 'milestone blooms')) + '</div>' +
     '<div><b>' + fmtNum(S.lifetime) + '</b> remembrances tended</div></div>' +
     '<div class="stat-row"><div class="stat"><b>' + discovered + '</b><span>' + esc(T('statUnit', 'blooms')) + '</span></div>' +
     '<div class="stat"><b>' + fmtNum(S.lifetime) + '</b><span>lifetime</span></div>' +
     '<div class="stat"><b>' + practiced + '</b><span>phrases</span></div></div>' +
     '<button class="btn-gold btn-block" data-go-bloom style="margin-top:12px">Tend your blooms 🌸</button></section>';
-
-  // theme picker
-  html += themePickerCard();
 
   // next reward
   html += renderNextReward();
@@ -3996,6 +3997,10 @@ var BUDDY_TREASURES = [
   { id: 'tr-frame', name: 'Flower Frame', emoji: '🌼' },
   { id: 'tr-aurora', name: 'Aurora Sky', emoji: '🌌' }
 ];
+/* The gold cap is NOT part of the base character art — it is an equipable
+   accessory, owned from the start and equipped by default. It is never part
+   of the secret random treasure pool. */
+var BUDDY_HAT = { id: 'tr-goldcap', name: 'Gold Cap', img: 'hat.png' };
 var BUDDY_TREASURE_DHIKR_STEPS = [100, 300, 600, 1000, 1500, 2200, 3000, 4000, 5500, 7500]; // hidden: lifetime taps
 var BUDDY_TREASURE_TIME_STEPS = [5, 15, 30, 60, 120, 240, 480, 720]; // hidden: minutes with buddy
 var BUDDY_TREATS = [
@@ -4029,6 +4034,13 @@ function buddy() {
   if (!Array.isArray(b.treasures)) b.treasures = [];
   if (!Array.isArray(b.treasurePool)) b.treasurePool = [];
   if (!Array.isArray(b.equipped)) b.equipped = [];
+  /* one-time grant: the gold cap is owned from the start and equipped by
+     default (never re-granted, so unequipping persists) */
+  if (!b._hatGiven) {
+    if (b.treasures.indexOf('tr-goldcap') < 0) b.treasures.push('tr-goldcap');
+    if (b.equipped.indexOf('tr-goldcap') < 0) b.equipped.push('tr-goldcap');
+    b._hatGiven = true;
+  }
   if (!b.dayDhikr || typeof b.dayDhikr !== 'object' || Array.isArray(b.dayDhikr)) b.dayDhikr = {};
   if (!b.treats || typeof b.treats !== 'object' || Array.isArray(b.treats)) b.treats = {};
   if (!b.treasurePool.length && !b.treasures.length) b.treasurePool = shuffledTreasurePool();
@@ -4040,6 +4052,7 @@ function buddyStage(level) {
 }
 function buddyStageName(level) { return BUDDY_STAGE_NAMES[buddyStage(level) - 1]; }
 function treasureById(id) {
+  if (id === 'tr-goldcap') return BUDDY_HAT;
   for (var i = 0; i < BUDDY_TREASURES.length; i++) if (BUDDY_TREASURES[i].id === id) return BUDDY_TREASURES[i];
   return null;
 }
@@ -4151,10 +4164,17 @@ function buddyActiveTreats() {
   for (k in tr) { if (Number(tr[k]) > now) out.push(k); }
   return out;
 }
-function buddyCharHtml() {
+function buddyHatImgHtml(size) {
+  var b = buddy();
+  if ((b.equipped || []).indexOf('tr-goldcap') < 0) return '';
+  var hw = Math.round(size * 0.80), top = Math.round(size * -0.167);
+  return '<img class="buddy-hatimg" src="hat.png" alt="Gold cap" style="width:' + hw + 'px;top:' + top + 'px">';
+}
+function buddyCharHtml(sizeBase) {
   var b = buddy();
   var stage = buddyStage(b.level);
-  var size = Math.round(56 * Math.min(1.26, 0.84 + (stage - 1) * 0.045));
+  var base = Number(sizeBase) > 0 ? Number(sizeBase) : 56;
+  var size = Math.round(base * Math.min(1.26, 0.84 + (stage - 1) * 0.045));
   var cls = 'buddy-char stage-' + stage;
   var now = Date.now();
   if (buddyIsRadiant()) cls += ' buddy-radiant';
@@ -4164,14 +4184,15 @@ function buddyCharHtml() {
   if (treats.indexOf('trail') >= 0) cls += ' treat-trail';
   if (treats.indexOf('cheeks') >= 0) cls += ' treat-cheeks';
   var html = '<div class="' + cls + '" data-buddy-tap="1" role="button" tabindex="0" aria-label="' + esc(b.name) + ', your companion, level ' + b.level + '">';
-  html += '<span class="buddy-emoji"><img class="buddy-img" src="buddy.png" alt="' + esc(b.name) + '" style="width:' + size + 'px;height:' + size + 'px"></span>';
+  html += '<span class="buddy-emoji"><img class="buddy-img" src="buddy.png" alt="' + esc(b.name) + '" style="width:' + size + 'px;height:' + size + 'px">' + buddyHatImgHtml(size) + '</span>';
   html += '<span class="buddy-accessory">' + buddyThemeAccessory() + '</span>';
   var eq = b.equipped || [], shown = 0;
   if (eq.length) {
     html += '<span class="buddy-equipped">';
     for (var i = 0; i < eq.length && shown < 3; i++) {
       var t = treasureById(eq[i]);
-      if (t) { html += '<span>' + t.emoji + '</span>'; shown++; }
+      if (!t || t.id === 'tr-goldcap') continue;
+      html += '<span>' + (t.img ? '<img src="' + t.img + '" alt="" style="width:1.1em;height:1.1em;vertical-align:-0.15em">' : t.emoji) + '</span>'; shown++;
     }
     html += '</span>';
   }
@@ -4228,34 +4249,40 @@ function roadTo500Html() {
 }
 function treasuresHtml() {
   var b = buddy();
+  var secrets = [];
+  for (var si = 0; si < b.treasures.length; si++) { if (b.treasures[si] !== 'tr-goldcap') secrets.push(b.treasures[si]); }
   var html = '<div class="card"><div class="row-between" style="align-items:center"><div>' +
     '<span class="kicker k-gold">Treasures</span>' +
-    '<h3 style="margin:4px 0 0">' + b.treasures.length + ' of 18 found</h3></div></div>' +
+    '<h3 style="margin:4px 0 0">' + secrets.length + ' of 18 found</h3></div></div>' +
     '<div class="treasure-grid">';
-  for (var i = 0; i < b.treasures.length; i++) {
-    var t = treasureById(b.treasures[i]);
+  var hatOn = (b.equipped || []).indexOf('tr-goldcap') >= 0;
+  html += '<button class="treasure' + (hatOn ? ' active' : '') + '" data-treasure="tr-goldcap">' +
+    '<span><img class="treasure-img" src="hat.png" alt="Gold cap"></span><b>Gold Cap</b><i>' + (hatOn ? 'On' : 'Tap to wear') + '</i></button>';
+  for (var i = 0; i < secrets.length; i++) {
+    var t = treasureById(secrets[i]);
     if (!t) continue;
     var active = (b.equipped || []).indexOf(t.id) >= 0;
     html += '<button class="treasure' + (active ? ' active' : '') + '" data-treasure="' + t.id + '">' +
       '<span>' + t.emoji + '</span><b>' + esc(t.name) + '</b><i>' + (active ? 'On' : 'Tap to wear') + '</i></button>';
   }
-  for (var k = b.treasures.length; k < 18; k++) {
+  for (var k = secrets.length; k < 18; k++) {
     html += '<div class="treasure secret"><span>?</span><b>Secret</b></div>';
   }
   html += '</div><p class="muted" style="margin-bottom:0">Secret gifts appear as you do dhikr and spend time with your buddy.</p></div>';
   return html;
 }
-/* compact home preview */
-function buddyPreviewHtml() {
+/* large companion hero: buddy standing in the selected theme environment,
+   at the very top of home (replaces the old compact preview card) */
+function buddyEnvHeroHtml() {
   var b = buddy();
-  return '<section class="card buddy-preview"><div class="row-between" style="align-items:center;gap:10px">' +
-    '<div style="display:flex;align-items:center;gap:12px;min-width:0">' +
-    '<div class="buddy-mini">' + buddyCharHtml() + '</div>' +
-    '<div style="min-width:0"><b>' + esc(b.name) + '</b>' +
-    '<div class="muted">Level ' + b.level + ' of 500 · ' + esc(buddyStageName(b.level)) + '</div>' +
-    buddyXpBarHtml(true) + '</div></div>' +
-    '<button class="btn-gold" data-go-companion style="flex:0 0 auto">Visit companion →</button>' +
-    '</div></section>';
+  var t = currentTheme();
+  var scene = t === 'highway' ? highwayScene() : t === 'mine' ? mineScene() : gardenScene();
+  var html = '<section class="card buddy-env-hero">';
+  html += '<div class="buddy-env-scene">' + scene + '<div class="buddy-env-char">' + buddyCharHtml(170) + '</div></div>';
+  html += '<div class="buddy-env-plaque"><b>' + esc(b.name) + '</b><div class="muted">Level ' + b.level + ' of 500 · ' + esc(buddyStageName(b.level)) + '</div></div>';
+  html += '<button class="btn-gold btn-block" data-go-companion style="margin:10px 16px 16px">Visit companion →</button>';
+  html += '</section>';
+  return html;
 }
 /* ---- companion screen ---- */
 function renderCompanion() {

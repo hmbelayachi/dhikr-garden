@@ -3,7 +3,7 @@
    (e.g. https://user.github.io/repo/). Scope is the worker's own directory. */
 'use strict';
 
-var CACHE = 'dhikr-garden-v19';
+var CACHE = 'dhikr-garden-v20';
 var SHELL = [
   './',
   'index.html',
@@ -18,6 +18,7 @@ var SHELL = [
   'char-sprout.png',
   'char-flip.png',
   'buddy.png',
+  'hat.png',
   'audio/ya-hayyu-ya-qayyum.mp3',
   'audio/ayat-al-kursi.mp3',
   'audio/hasbiyallah.mp3',
