@@ -716,6 +716,7 @@ body[data-theme="mine"].amb-night     { background: #080604; }
 .arcade-best { font-size: .85rem; color: var(--sage); font-weight: 700; }
 .arcade-best b { color: var(--gold); font-weight: 900; }
 .arcade-card .btn-gold { width: 100%; margin-top: 4px; }
+.arcade-char-img { display: block; margin: 0 auto; image-rendering: auto; }
 
 /* home-page arcade picker */
 .home-arcade .arcade-grid { margin-top: 12px; }
@@ -742,3 +743,102 @@ body[data-theme="mine"].amb-night     { background: #080604; }
   .arcade-grid { grid-template-columns: 1fr; }
   .lvl-grid { grid-template-columns: 1fr; }
 }
+
+/* ---- arcade time chip (during runs) ---- */
+.arcade-time-chip {
+  position: fixed; top: 12px; left: 50%; transform: translateX(-50%);
+  background: rgba(10, 16, 13, .92); border: 1px solid var(--gold);
+  color: var(--cream); font-weight: 900; font-size: 1.05rem;
+  padding: 8px 18px; border-radius: 999px; z-index: 80;
+  box-shadow: 0 4px 16px rgba(0,0,0,.5);
+}
+
+/* ---- dhikr gate (loss gate) / treat picker / rename modals ---- */
+.gate-backdrop {
+  position: fixed; inset: 0; background: rgba(3, 8, 6, .88); z-index: 55;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.gate-modal {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  max-width: 420px; width: 100%; padding: 26px 22px; text-align: center;
+  box-shadow: 0 12px 40px rgba(0,0,0,.6);
+  max-height: 88vh; overflow-y: auto;
+}
+.gate-count { font-size: 2.2rem; color: var(--cream); margin: 10px 0 2px; }
+.gate-count b { color: var(--gold); }
+.gate-elapsed { color: var(--sage); font-weight: 800; margin-bottom: 12px; }
+.rename-input {
+  width: 100%; padding: 12px 14px; border-radius: 12px; margin-top: 10px;
+  border: 1px solid var(--border); background: var(--inset); color: var(--cream);
+  font-family: var(--font-latin); font-weight: 800; font-size: 1.05rem; text-align: center;
+}
+
+/* ---- buddy ---- */
+.buddy-wrap { position: relative; display: inline-block; }
+.buddy-char {
+  position: relative; display: inline-block; cursor: pointer;
+  padding: 10px; border-radius: 50%; user-select: none; -webkit-user-select: none;
+  touch-action: pan-y;
+}
+.buddy-emoji { display: inline-block; line-height: 1; }
+.buddy-accessory { position: absolute; top: 0; right: 2px; font-size: 1.3rem; }
+.buddy-equipped { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); font-size: 1.1rem; white-space: nowrap; }
+.buddy-zzz { position: absolute; top: -6px; left: -2px; font-size: 1.4rem; animation: zzz 2.4s ease-in-out infinite; }
+@keyframes zzz { 0%,100% { transform: translateY(0); opacity: .9; } 50% { transform: translateY(-6px); opacity: .5; } }
+.buddy-name { font-weight: 900; color: var(--cream); margin-top: 6px; }
+.buddy-stage { color: var(--sage); font-size: .9rem; }
+.buddy-wiggle .buddy-emoji { animation: wiggle .5s ease; display: inline-block; }
+@keyframes wiggle { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-14deg) scale(1.08); } 75% { transform: rotate(14deg) scale(1.08); } }
+.buddy-hop .buddy-emoji { animation: hop .8s ease; display: inline-block; }
+@keyframes hop { 0%,100% { transform: translateY(0); } 30% { transform: translateY(-34px); } 55% { transform: translateY(0); } 75% { transform: translateY(-16px); } }
+.buddy-puff .buddy-emoji { animation: puff 4s ease; display: inline-block; }
+@keyframes puff { 0%,100% { transform: scale(1); } 20%,80% { transform: scale(1.45); } }
+.buddy-radiant .buddy-emoji { filter: drop-shadow(0 0 14px rgba(255, 210, 63, .95)); animation: radiant 2.6s ease-in-out infinite; display: inline-block; }
+@keyframes radiant { 0%,100% { filter: drop-shadow(0 0 8px rgba(255,210,63,.7)); } 50% { filter: drop-shadow(0 0 20px rgba(255,210,63,1)); } }
+.treat-glow .buddy-emoji { filter: drop-shadow(0 0 12px rgba(255, 190, 60, .9)); }
+.treat-cheeks::after { content: "🌈"; position: absolute; bottom: 6px; left: 50%; transform: translateX(-50%); font-size: 1rem; }
+.buddy-sparkle { position: absolute; font-size: 1rem; pointer-events: none; animation: sparkleUp .9s ease forwards; z-index: 5; }
+@keyframes sparkleUp { from { transform: translateY(0) scale(1); opacity: 1; } to { transform: translateY(-46px) scale(.4); opacity: 0; } }
+.fetch-star { position: absolute; font-size: 1.8rem; left: 8%; top: 30%; animation: fetchAcross 1.6s ease-in-out forwards; z-index: 6; }
+@keyframes fetchAcross { 0% { left: 8%; top: 30%; } 45% { left: 78%; top: 12%; } 100% { left: 8%; top: 30%; } }
+.companion-stage { text-align: center; }
+.companion-scene { position: relative; display: inline-block; padding: 8px 30px; }
+.buddy-mini .buddy-char { padding: 4px; cursor: default; }
+.buddy-mini .buddy-accessory { font-size: .9rem; }
+.buddy-mini .buddy-zzz { font-size: 1rem; }
+
+/* ---- buddy XP bar ---- */
+.buddy-xp { height: 16px; border-radius: 999px; background: var(--inset); border: 1px solid var(--border); overflow: hidden; margin: 10px auto; max-width: 420px; }
+.buddy-xp.slim { height: 9px; margin: 6px 0 0; max-width: 190px; }
+.buddy-xp-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, #4caf7d, #ffd23f); transition: width .5s ease; }
+
+/* ---- road to 500 ---- */
+.road { position: relative; padding: 10px 6px; }
+.road-node { position: relative; width: 46%; margin: 0 0 6px; padding: 8px; border-radius: 14px; background: var(--inset); border: 1px solid var(--border); text-align: center; }
+.road-node.left { margin-right: auto; }
+.road-node.right { margin-left: auto; }
+.road-node.current { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227,169,60,.35); }
+.road-node.open .road-chest { filter: none; }
+.road-chest { font-size: 1.7rem; font-weight: 900; color: var(--sage); }
+.road-node.open .road-chest { color: var(--gold); }
+.road-lvl { font-size: .8rem; color: var(--sage); font-weight: 800; }
+.road-pin { font-size: .85rem; font-weight: 900; color: var(--gold); margin-top: 2px; }
+
+/* ---- treasures ---- */
+.treasure-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
+.treasure { background: var(--inset); border: 1px solid var(--border); border-radius: 14px; padding: 10px 6px; color: var(--cream); font-family: var(--font-latin); }
+.treasure span { font-size: 1.7rem; display: block; }
+.treasure b { display: block; font-size: .78rem; margin-top: 4px; }
+.treasure i { display: block; font-style: normal; font-size: .68rem; color: var(--sage); }
+.treasure.active { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(227,169,60,.3); }
+.treasure.secret { opacity: .55; }
+.treasure.secret span { color: var(--sage-dim); font-weight: 900; }
+
+/* ---- buddy tiles ---- */
+.buddy-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 10px; }
+.buddy-tiles .tile { background: var(--inset); border: 1px solid var(--border); border-radius: 14px; padding: 12px 8px; color: var(--cream); font-family: var(--font-latin); font-size: 1.5rem; }
+.buddy-tiles .tile b { display: block; font-size: .85rem; margin-top: 4px; }
+.buddy-tiles .tile i { display: block; font-style: normal; font-size: .7rem; color: var(--sage); }
+
+/* ---- buddy preview on home ---- */
+.buddy-preview { margin-top: 12px; }

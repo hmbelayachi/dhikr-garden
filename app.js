@@ -339,14 +339,20 @@ function migrateChecklistKeys() {
 /* ---------------- ADHKAR ARCADE constants ---------------- */
 var GAME_COST = 5;
 var ARCADE_GAMES = [
-  { id: 'sprout', name: 'Sprout Climb', emoji: '🌱', tag: 'Climb, double-jump & power up' },
-  { id: 'flip', name: 'Flip Runner', emoji: '🌀', tag: 'Flip, dodge & unlock gear' },
+  { id: 'sprout', name: 'Sprout Climb', emoji: '🌱', img: 'char-sprout.png', tag: 'Climb, double-jump & power up' },
+  { id: 'flip', name: 'Flip Runner', emoji: '🌀', img: 'char-flip.png', tag: 'Flip, dodge & unlock gear' },
   { id: 'firefly', name: 'Firefly Flight', emoji: '✨', tag: 'Flap through narrowing arches' },
   { id: 'vine', name: 'Vine Snake', emoji: '🌿', tag: 'Grow, turn & chase water' }
 ];
 function arcadeGameDef(id) {
   for (var i = 0; i < ARCADE_GAMES.length; i++) if (ARCADE_GAMES[i].id === id) return ARCADE_GAMES[i];
   return ARCADE_GAMES[0];
+}
+/* character art for game cards/start cards; falls back to the emoji */
+function arcadeIconHtml(gm, px) {
+  var s = Number(px) || 56;
+  if (gm && gm.img) return '<img class="arcade-char-img" src="' + esc(gm.img) + '" alt="" style="height:' + s + 'px;width:auto">';
+  return '<div style="font-size:' + Math.round(s * 0.6) + 'px;line-height:1">' + (gm ? gm.emoji : '🎮') + '</div>';
 }
 function arcadeHigh(game) {
   return Math.floor(Number((S.arcadeHigh || {})[game]) || 0);
@@ -658,7 +664,11 @@ var S = {
   vineColor: safeGet('dg_vine_color', 'vc-green'),
   rhythmLevel: safeGet('dg_rhythm_level', 'expert'), // checklist level id
   audioListened: safeGet('dg_audio_listened_v2', {}),   // {YYYY-MM-DD:{itemId:1}} — relocks daily
-  prayerCache: safeGet('dg_prayer_cache', null)      // {date,lat,lon,fajr,maghrib} ISO strings
+  prayerCache: safeGet('dg_prayer_cache', null),      // {date,lat,lon,fajr,maghrib} ISO strings
+  arcadeTime: (function () { var t = safeGet('dg_arcade_time', 0); return (typeof t === 'number' && t >= 0) ? Math.floor(t) : 0; })(),
+  buddy: safeGet('dg_buddy', null),                       // companion state (normalized below)
+  bloomHigh: (function () { var h = safeGet('dg_bloom_high', 0); return (typeof h === 'number' && h >= 0) ? Math.floor(h) : 0; })(),
+  bloomAttempts: (function () { var n = safeGet('dg_bloom_attempts', 0); return (typeof n === 'number' && n >= 0) ? Math.floor(n) : 0; })()
 };
 if (typeof S.sessions !== 'number') S.sessions = 0;
 if (typeof S.lifetime !== 'number') S.lifetime = 0;
@@ -705,6 +715,10 @@ function saveState() {
   safeSet('dg_rhythm_level', S.rhythmLevel);
   safeSet('dg_audio_listened_v2', S.audioListened);
   safeSet('dg_prayer_cache', S.prayerCache);
+  safeSet('dg_arcade_time', S.arcadeTime);
+  safeSet('dg_buddy', S.buddy);
+  safeSet('dg_bloom_high', S.bloomHigh);
+  safeSet('dg_bloom_attempts', S.bloomAttempts);
 }
 
 /* ---------------- prayer times: Muslim World League solar math ----------------
@@ -1205,12 +1219,13 @@ function dhikrLocked(dh) {
 }
 
 /* ---------------- UI primitives ---------------- */
-var SCREENS = ['home', 'practice', 'daily', 'learn', 'herbarium', 'reader', 'progress', 'game', 'getting-started'];
+var SCREENS = ['home', 'practice', 'daily', 'learn', 'herbarium', 'reader', 'progress', 'game', 'getting-started', 'companion', 'bloom'];
 var currentScreen = 'home';
 
 function showScreen(name) {
   if (SCREENS.indexOf(name) === -1) name = 'home';
-  try { stopArcade(); stopAllAudio(); } catch (e) { /* game loop never blocks navigation */ }
+  try { buddyTrackScreen(name); } catch (e) { /* buddy time tracking optional */ }
+  try { stopArcade(); stopBloom(); stopAllAudio(); } catch (e) { /* game loop never blocks navigation */ }
   currentScreen = name;
   for (var i = 0; i < SCREENS.length; i++) {
     var sec = el('screen-' + SCREENS[i]);
@@ -1224,7 +1239,8 @@ function showScreen(name) {
   try {
     var fn = { home: renderHome, practice: renderPractice, daily: renderDaily,
                learn: renderLearn, herbarium: renderHerbarium,
-               reader: function () {}, progress: renderProgress, game: renderGame, 'getting-started': renderGettingStarted }[name];
+               reader: function () {}, progress: renderProgress, game: renderGame, 'getting-started': renderGettingStarted,
+               companion: renderCompanion, bloom: renderBloom }[name];
     if (fn) fn();
   } catch (e) { /* a screen must never break navigation */ }
 }
@@ -1538,12 +1554,14 @@ function homeArcadePanel() {
   var html = '<section class="card home-arcade"><div class="row-between" style="align-items:center">' +
     '<div><span class="kicker k-gold">Spend your adhkar credits</span>' +
     '<h2 style="margin:4px 0 0">Adhkar Arcade</h2></div>' +
-    '<span class="coin-badge"><b>' + fmtNum(S.credits) + '</b><small>coins</small></span></div>' +
+    '<div style="display:flex;gap:8px;align-items:center">' +
+    '<span class="coin-badge"><b>' + fmtNum(S.credits) + '</b><small>coins</small></span>' +
+    '<span class="coin-badge"><b>⏱ ' + arcadeTimeStr(S.arcadeTime) + '</b><small>time</small></span></div></div>' +
     '<div class="arcade-grid">';
   for (var i = 0; i < ARCADE_GAMES.length; i++) {
     (function (gm) {
       html += '<button class="card arcade-card home-game-card" data-arcade-play="' + gm.id + '">' +
-        '<div style="font-size:2rem">' + gm.emoji + '</div>' +
+        arcadeIconHtml(gm, 56) +
         '<h3>' + esc(gm.name) + '</h3><p class="muted">' + esc(gm.tag) + '</p></button>';
     })(ARCADE_GAMES[i]);
   }
@@ -1555,6 +1573,7 @@ function homeArcadePanel() {
 function renderHome() {
   var sec = el('screen-home');
   if (!sec) return;
+  try { buddyCheckDevolution(); } catch (e) { /* buddy optional */ }
   var away = newlyMatured();
   var season = currentSeason();
   var hijri = hijriDateString();
@@ -1589,7 +1608,11 @@ function renderHome() {
     '<div><b>' + fmtNum(S.lifetime) + '</b> remembrances tended</div></div>' +
     '<div class="stat-row"><div class="stat"><b>' + discovered + '</b><span>' + esc(T('statUnit', 'blooms')) + '</span></div>' +
     '<div class="stat"><b>' + fmtNum(S.lifetime) + '</b><span>lifetime</span></div>' +
-    '<div class="stat"><b>' + practiced + '</b><span>phrases</span></div></div></section>';
+    '<div class="stat"><b>' + practiced + '</b><span>phrases</span></div></div>' +
+    '<button class="btn-gold btn-block" data-go-bloom style="margin-top:12px">Tend your blooms 🌸</button></section>';
+
+  // buddy preview (compact)
+  try { html += buddyPreviewHtml(); } catch (e) { /* buddy optional */ }
 
   // theme picker
   html += themePickerCard();
@@ -1636,6 +1659,11 @@ function renderHome() {
   }
   var am = sec.querySelector('[data-arcade-menu]');
   if (am) am.addEventListener('click', function () { arcadeScreen = 'menu'; showScreen('game'); });
+  var gb = sec.querySelector('[data-go-bloom]');
+  if (gb) gb.addEventListener('click', function () { showScreen('bloom'); });
+  var gc = sec.querySelector('[data-go-companion]');
+  if (gc) gc.addEventListener('click', function () { showScreen('companion'); });
+  try { wireBuddyScene(sec); } catch (e) { /* buddy optional */ }
   var tp = sec.querySelectorAll('[data-theme-pick]');
   for (var tp_i = 0; tp_i < tp.length; tp_i++) {
     (function (b) { b.addEventListener('click', function () { setTheme(b.getAttribute('data-theme-pick')); }); })(tp[tp_i]);
@@ -1672,7 +1700,85 @@ function requestLocation(after) {
 }
 
 /* ---------------- PRACTICE ---------------- */
-var PC = { dhikrId: null, target: 33, count: 0, generalTarget: 33, generalCount: 0 };
+var PC = { dhikrId: null, target: 33, count: 0, generalTarget: 33, generalCount: 0, milestone: 0, generalMilestone: 0, lvMilestone: 0, generalLvMilestone: 0, lastTap: 0, generalLastTap: 0, segStart: 0, generalSegStart: 0, slowHintAt: 0 };
+
+/* Tap integrity: at least 1 second must pass between counted taps.
+   Faster taps are ignored (with a subtle hint); the first tap always counts. */
+function tapPaced(which) {
+  var now = Date.now();
+  var key = which === 'general' ? 'generalLastTap' : 'lastTap';
+  var last = PC[key] || 0;
+  if (last && now - last < 1000) {
+    if (now - (PC.slowHintAt || 0) > 2500) {
+      PC.slowHintAt = now;
+      toast('Slow down — one tap each second 🤲');
+    }
+    return false;
+  }
+  PC[key] = now;
+  var sk = which === 'general' ? 'generalSegStart' : 'segStart';
+  if (!PC[sk]) PC[sk] = now; // segment timer starts on the first counted tap
+  return true;
+}
+function tapReset(which) {
+  if (which === 'general') { PC.generalCount = 0; PC.generalMilestone = 0; PC.generalLvMilestone = 0; PC.generalLastTap = 0; PC.generalSegStart = 0; }
+  else { PC.count = 0; PC.milestone = 0; PC.lvMilestone = 0; PC.lastTap = 0; PC.segStart = 0; }
+}
+
+/* Milestone bundle (the chat app's economy): every 10 dhikr on phrase OR
+   general counters grants ONE bundle via a single celebratory pop-up —
+   +60s arcade time and +10 buddy snacks. No saving required. Credits now
+   come only from the morning/evening checklist. 1-second tap pacing
+   (tapPaced) is the enforcement — faster taps are ignored. Companion levels
+   stay on 33s (see awardLevelMilestone). */
+function awardMilestoneBundle(which) {
+  buddy(); // ensure buddy state exists
+  var n = which === 'general' ? PC.generalCount : PC.count;
+  var key = which === 'general' ? 'generalMilestone' : 'milestone';
+  var m = Math.floor(n / 10);
+  if (m <= (PC[key] || 0)) return;
+  PC[key] = m;
+  // award the bundle
+  var timeNote = '';
+  var newTime = (Number(S.arcadeTime) || 0) + 60;
+  if (newTime >= 1800) {
+    if ((Number(S.arcadeTime) || 0) < 1800) timeNote = ' (Arcade bank full!)';
+    newTime = 1800;
+  }
+  S.arcadeTime = newTime;
+  var bd = buddy();
+  bd.snacks = (Number(bd.snacks) || 0) + 10;
+  saveState();
+  celebrate({
+    emoji: '🎉',
+    title: fmtNum(m * 10) + ' dhikr — mashaAllah!',
+    sub: '+1:00 arcade time ⏱' + timeNote + ' · +10 snacks 🍯'
+  });
+}
+
+/* Companion levels stay on 33s: 1 level per 33 Practice dhikr per counting
+   run, idempotent per milestone (2 on Radiant Day if radiant was already
+   active when the 33-segment began). Brief level-up notice. */
+function awardLevelMilestone(which) {
+  buddy(); // ensure buddy state exists
+  var n = which === 'general' ? PC.generalCount : PC.count;
+  var key = which === 'general' ? 'generalLvMilestone' : 'lvMilestone';
+  var sk = which === 'general' ? 'generalSegStart' : 'segStart';
+  var m = Math.floor(n / 33);
+  if (m <= (PC[key] || 0)) return;
+  PC[key] = m;
+  var segStart = PC[sk] || Date.now();
+  PC[sk] = 0; // next 33-segment starts on the next counted tap
+  var bd = buddy();
+  // Radiant double-XP applies only if radiant was already active when this
+  // 33-segment began (the milestone that activates Radiant Day earns 1 level)
+  var radiant = bd.radiantDay === todayKey() && (Number(bd.radiantSince) || 0) < segStart;
+  var lvGain = radiant ? 2 : 1;
+  var gained = buddyGainLevels(lvGain);
+  buddyCheckTreasures();
+  saveState();
+  if (gained > 0) toast('+' + gained + ' companion level 🌱 · Level ' + fmtNum(buddy().level) + ' of 500');
+}
 
 function practiceOptions() {
   var list = getDhikr();
@@ -1764,7 +1870,7 @@ function renderPractice() {
   if (sel) {
     sel.value = PC.dhikrId;
     sel.addEventListener('change', function () {
-      PC.dhikrId = sel.value; PC.count = 0;
+      PC.dhikrId = sel.value; tapReset('phrase');
       var ndh = dhikrById(PC.dhikrId);
       if (ndh && Number(ndh.target) > 0) PC.target = Number(ndh.target);
       el('practice-body').innerHTML = practiceBody(ndh, dhikrLocked(ndh));
@@ -1825,13 +1931,17 @@ function wireTap() {
     updateTapUI();
   });
   btn.addEventListener('click', function () {
+    if (!tapPaced('phrase')) return;
     PC.count++;
+    buddyCountDhikr(1);
+    awardMilestoneBundle('phrase');
+    awardLevelMilestone('phrase');
     updateTapUI();
     if (PC.count >= PC.target) {
       setTimeout(function () { completeSession(false); }, 350);
     }
   });
-  el('reset-btn').addEventListener('click', function () { PC.count = 0; updateTapUI(); });
+  el('reset-btn').addEventListener('click', function () { tapReset('phrase'); updateTapUI(); });
   el('complete-btn').addEventListener('click', function () { completeSession(true); });
   updateTapUI();
 }
@@ -1853,7 +1963,7 @@ function completeSession(early) {
   plantFlower({ dhikrId: dh.id, name: bf.name, emoji: bf.emoji, kind: 'base', rarity: '' });
   discoverFlower('base:' + dh.id, bf.name, bf.emoji, '');
   saveState();
-  PC.count = 0;
+  tapReset('phrase');
   celebrate({
     emoji: bf.emoji,
     title: early ? 'Session complete!' : 'Target reached — mashaAllah!',
@@ -1927,19 +2037,23 @@ function wireGeneral(sec) {
   }
   var presets = sec.querySelectorAll('.gpreset');
   for (var i = 0; i < presets.length; i++) {
-    (function (b) { b.addEventListener('click', function () { PC.generalTarget = Number(b.getAttribute('data-t')); PC.generalCount = 0; upd(); }); })(presets[i]);
+    (function (b) { b.addEventListener('click', function () { PC.generalTarget = Number(b.getAttribute('data-t')); tapReset('general'); upd(); }); })(presets[i]);
   }
   el('gset').addEventListener('click', function () {
     var v = Math.max(1, Math.floor(Number(el('gcustom').value) || 0));
-    if (v > 0) { PC.generalTarget = v; PC.generalCount = 0; upd(); }
+    if (v > 0) { PC.generalTarget = v; tapReset('general'); upd(); }
   });
   btn.addEventListener('click', function () {
+    if (!tapPaced('general')) return;
     PC.generalCount++; upd();
+    buddyCountDhikr(1);
+    awardMilestoneBundle('general');
+    awardLevelMilestone('general');
     if (PC.generalCount >= PC.generalTarget) {
       setTimeout(function () { saveGeneral(false); }, 350);
     }
   });
-  el('greset').addEventListener('click', function () { PC.generalCount = 0; upd(); });
+  el('greset').addEventListener('click', function () { tapReset('general'); upd(); });
   el('gcomplete').addEventListener('click', function () { saveGeneral(true); });
   var rs = el('replant-select');
   if (rs) {
@@ -1977,7 +2091,7 @@ function saveGeneral(early) {
   } else if (!replanted) {
     toast('Saved ' + fmtNum(n) + ' as General dhikr 🤲');
   }
-  PC.generalCount = 0;
+  tapReset('general');
   renderPractice();
 }
 
@@ -2666,6 +2780,7 @@ function arcadeCancel(G) {
   if (G && G.raf) { try { cancelAnimationFrame(G.raf); } catch (e) {} }
 }
 function stopArcade() {
+  arcadeRunEnd();
   arcadeCountdownClear();
   arcadeCancel(sproutG); arcadeCancel(flipG); arcadeCancel(fireflyG); arcadeCancel(vineG);
   sproutG = flipG = fireflyG = vineG = null;
@@ -2679,13 +2794,79 @@ function stopArcade() {
     });
   } catch (e) {}
 }
-/* deduct one attempt; returns the attempt number, or 0 when too poor */
+/* deduct one attempt; returns the attempt number, or 0 when too poor.
+   Attempts need 5 credits AND arcade time above zero. */
 function arcadeStartDeduct(gameId) {
   if ((Number(S.credits) || 0) < GAME_COST) { toast('Not enough credits yet 🪙'); return 0; }
+  if ((Number(S.arcadeTime) || 0) <= 0) { toast('Out of arcade time ⏱ — earn 1 min per 10 dhikr in Practice'); return 0; }
   S.credits -= GAME_COST;
   var n = bumpArcadeAttempts(gameId);
   saveState();
   return n;
+}
+function arcadeCanPlay() {
+  return (Number(S.credits) || 0) >= GAME_COST && (Number(S.arcadeTime) || 0) > 0;
+}
+function arcadeTimeStr(s) {
+  s = Math.max(0, Math.floor(Number(s) || 0));
+  return Math.floor(s / 60) + ':' + pad2(s % 60);
+}
+/* ---- arcade time: ticks down in real time while a run is active ---- */
+var arcadeRun = null; // {gameId, timerId}
+function arcadeTimeChip(show) {
+  var chip = el('arcade-time-chip');
+  if (!chip) {
+    chip = document.createElement('div');
+    chip.id = 'arcade-time-chip';
+    chip.className = 'arcade-time-chip';
+    chip.hidden = true;
+    document.body.appendChild(chip);
+  }
+  if (show === false) { chip.hidden = true; return; }
+  chip.hidden = false;
+  chip.textContent = '⏱ ' + arcadeTimeStr(S.arcadeTime);
+}
+function arcadeRunBegin(gameId) {
+  arcadeRunEnd();
+  arcadeRun = { gameId: gameId, timerId: 0 };
+  arcadeTimeChip(true);
+  arcadeRun.timerId = setInterval(function () { arcadeTimeTick(); }, 1000);
+}
+function arcadeRunEnd() {
+  if (arcadeRun && arcadeRun.timerId) { try { clearInterval(arcadeRun.timerId); } catch (e) {} }
+  arcadeRun = null;
+  arcadeTimeChip(false);
+}
+function arcadeTimeTick() {
+  if (!arcadeRun) return;
+  S.arcadeTime = Math.max(0, (Number(S.arcadeTime) || 0) - 1);
+  arcadeTimeChip(true);
+  if (S.arcadeTime <= 0) { arcadeRunTimeUp(); }
+  else if (S.arcadeTime % 5 === 0) { try { saveState(); } catch (e) {} }
+}
+/* time ran out mid-run: end the attempt with an out-of-time panel */
+function arcadeRunTimeUp() {
+  var gameId = arcadeRun ? arcadeRun.gameId : null;
+  var G = gameId === 'sprout' ? sproutG : gameId === 'flip' ? flipG : gameId === 'firefly' ? fireflyG : gameId === 'vine' ? vineG : null;
+  var score = G ? Math.floor(Number(G.score) || 0) : 0;
+  if (G) G.over = true;
+  arcadeRunEnd();
+  stopArcade();
+  if (!gameId) return;
+  try { setArcadeHigh(gameId, score); saveState(); } catch (e) {}
+  var over = el(gameId + '-over');
+  if (!over) return;
+  over.innerHTML = '<div class="sprout-result"><div style="font-size:2.6rem">⏱</div>' +
+    '<h2>Out of arcade time</h2>' +
+    '<p class="muted">Every 10 dhikr in Practice earns 1 more minute.</p>' +
+    '<div class="btn-row" style="justify-content:center">' +
+    '<button class="btn-gold" data-goto-practice>Practice dhikr 🤲</button>' +
+    '<button class="btn-ghost" data-done>Arcade menu</button></div></div>';
+  over.hidden = false;
+  var gp = over.querySelector('[data-goto-practice]');
+  if (gp) gp.addEventListener('click', function () { showScreen('practice'); });
+  var dn = over.querySelector('[data-done]');
+  if (dn) dn.addEventListener('click', function () { arcadeScreen = 'menu'; renderGame(); });
 }
 /* canvas setup; the wrap must already be unhidden so it has a width */
 function arcadeCanvas(wrapId, canvasId, height) {
@@ -2735,7 +2916,11 @@ function arcadeCountdown(overId, beginFn) {
 /* shared game-over overlay */
 function arcadeOverHtml(gameId, score, unit, isBest, extraHtml) {
   var canAfford = (Number(S.credits) || 0) >= GAME_COST;
+  var hasTime = (Number(S.arcadeTime) || 0) > 0;
+  var canPlay = canAfford && hasTime;
   var def = arcadeGameDef(gameId);
+  var needMsg = !canAfford ? 'Need ' + GAME_COST + ' 🪙 to play'
+    : (!hasTime ? 'Need arcade time ⏱ — earn it in Practice' : '');
   return '<div class="sprout-result"><div style="font-size:2.6rem">' + def.emoji + '</div>' +
     '<h2>' + (isBest ? 'New best!' : esc(def.name) + ' over!') + '</h2>' +
     '<div class="sprout-score">' + fmtNum(score) + ' <small style="font-size:1rem;color:var(--sage)">' + esc(unit) + '</small></div>' +
@@ -2743,8 +2928,8 @@ function arcadeOverHtml(gameId, score, unit, isBest, extraHtml) {
             : '<p class="muted">Best: ' + fmtNum(arcadeHigh(gameId)) + ' ' + esc(unit) + '</p>') +
     (extraHtml || '') +
     '<div class="btn-row" style="justify-content:center">' +
-    '<button class="btn-gold" data-again="' + gameId + '"' + (canAfford ? '' : ' disabled') + '>' +
-    (canAfford ? 'Play again · ' + GAME_COST + ' 🪙' : 'Need ' + GAME_COST + ' 🪙 to play') + '</button>' +
+    '<button class="btn-gold" data-again="' + gameId + '"' + (canPlay ? '' : ' disabled') + '>' +
+    (canPlay ? 'Play again · ' + GAME_COST + ' 🪙' : needMsg) + '</button>' +
     '<button class="btn-ghost" data-done>Done</button></div></div>';
 }
 function wireArcadeOver(overEl, startFn) {
@@ -2796,18 +2981,26 @@ function wireCustom(sec, onPick) {
 function arcadeBalanceCard() {
   return '<div class="card"><div class="row-between"><div><span class="kicker k-gold">🪙 Your coins</span>' +
     '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.credits) + '</div></div>' +
+    '<div style="text-align:center"><span class="kicker k-sage">⏱ Arcade time</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + arcadeTimeStr(S.arcadeTime) + '</div></div>' +
     '<div style="text-align:right"><span class="kicker k-sage">Per attempt</span>' +
     '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + GAME_COST + ' 🪙</div></div></div>' +
-    '<p class="muted" style="margin:8px 0 0">Earn coins by completing morning &amp; evening adhkar — higher levels earn more.</p></div>';
+    '<p class="muted" style="margin:8px 0 0">Earn coins from morning &amp; evening adhkar — and 1:00 of arcade time for every 10 dhikr in Practice. Each attempt needs coins <i>and</i> time.</p></div>';
 }
 function arcadeStartCard(gameId, emoji, readyText, startId) {
   var canAfford = (Number(S.credits) || 0) >= GAME_COST;
+  var hasTime = (Number(S.arcadeTime) || 0) > 0;
+  var canPlay = canAfford && hasTime;
+  var gm = arcadeGameDef(gameId);
+  var icon = (gm && gm.img) ? arcadeIconHtml(gm, 72) : '<div style="font-size:2.4rem">' + emoji + '</div>';
+  var needMsg = !canAfford ? 'Need ' + GAME_COST + ' coins to play'
+    : (!hasTime ? 'Out of arcade time ⏱ — every 10 dhikr in Practice earns 1:00' : '');
   return '<div class="card" style="text-align:center" id="' + startId + '">' +
-    '<div style="font-size:2.4rem">' + emoji + '</div>' +
+    icon +
     '<p class="muted">' + readyText + '</p>' +
-    '<button class="btn-gold" id="' + startId + '-btn"' + (canAfford ? '' : ' disabled') + '>' +
-    (canAfford ? 'Start · ' + GAME_COST + ' 🪙' : 'Need ' + GAME_COST + ' coins to play') + '</button>' +
-    (canAfford ? '' : '<p class="muted" style="margin-top:8px">Complete morning &amp; evening adhkar to earn coins.</p>') +
+    '<button class="btn-gold" id="' + startId + '-btn"' + (canPlay ? '' : ' disabled') + '>' +
+    (canPlay ? 'Start · ' + GAME_COST + ' 🪙' : needMsg) + '</button>' +
+    (canPlay ? '' : '<p class="muted" style="margin-top:8px">Complete morning &amp; evening adhkar to earn coins.</p>') +
     '</div>';
 }
 
@@ -3009,6 +3202,8 @@ function sproutGameOver(G) {
   if (isBest) {
     try { celebrate({ emoji: '🧗', title: 'New best climb!', sub: 'You reached ' + fmtNum(G.score) + ' m — alhamdulillah!' }); } catch (e) {}
   }
+  arcadeRunEnd();
+  arcadeLossGate();
 }
 
 function startSproutRun() {
@@ -3019,6 +3214,7 @@ function startSproutRun() {
   var setup = arcadeCanvas('sprout-wrap', 'sprout-canvas', 480);
   if (!setup) return;
   stopArcade();
+  arcadeRunBegin('sprout');
   arcadeShowRun('sprout-wrap', 'sprout-over', 'sprout-start-card');
   var canvas = setup.canvas;
   var skin = sproutSkin();
@@ -3226,6 +3422,8 @@ function flipGameOver(G) {
   if (isBest) {
     try { celebrate({ emoji: '🌀', title: 'New best run!', sub: 'You ran ' + fmtNum(G.score) + ' m — alhamdulillah!' }); } catch (e) {}
   }
+  arcadeRunEnd();
+  arcadeLossGate();
 }
 function startFlipRun() {
   var attempt = arcadeStartDeduct('flip');
@@ -3235,6 +3433,7 @@ function startFlipRun() {
   var setup = arcadeCanvas('flip-wrap', 'flip-canvas', 420);
   if (!setup) return;
   stopArcade();
+  arcadeRunBegin('flip');
   arcadeShowRun('flip-wrap', 'flip-over', 'flip-start-card');
   var canvas = setup.canvas;
   var W = setup.W, H = setup.H;
@@ -3287,6 +3486,7 @@ function startFireflyRun() {
   var setup = arcadeCanvas('firefly-wrap', 'firefly-canvas', 480);
   if (!setup) return;
   stopArcade();
+  arcadeRunBegin('firefly');
   arcadeShowRun('firefly-wrap', 'firefly-over', 'firefly-start-card');
   var canvas = setup.canvas;
   var W = setup.W, H = setup.H;
@@ -3404,6 +3604,8 @@ function fireflyGameOver(G) {
   if (isBest) {
     try { celebrate({ emoji: '✨', title: 'New best flight!', sub: fmtNum(G.score) + ' arches — alhamdulillah!' }); } catch (e) {}
   }
+  arcadeRunEnd();
+  arcadeLossGate();
 }
 
 /* ---------------- VINE SNAKE (classic snake) ----------------
@@ -3503,6 +3705,8 @@ function vineGameOver(G) {
   if (isBest) {
     try { celebrate({ emoji: '🌿', title: 'New best vine!', sub: fmtNum(G.score) + ' drops — alhamdulillah!' }); } catch (e) {}
   }
+  arcadeRunEnd();
+  arcadeLossGate();
 }
 function startVineRun() {
   var attempt = arcadeStartDeduct('vine');
@@ -3513,6 +3717,7 @@ function startVineRun() {
   var setup = arcadeCanvas('vine-wrap', 'vine-canvas', side);
   if (!setup) return;
   stopArcade();
+  arcadeRunBegin('vine');
   arcadeShowRun('vine-wrap', 'vine-over', 'vine-start-card');
   var canvas = setup.canvas;
   var N = 17, cell = setup.W / N;
@@ -3584,15 +3789,15 @@ function renderArcadeMenu(sec) {
   var html = '<button class="backlink" data-go="home">← Home</button>' +
     '<span class="kicker k-sage">Skill games · no luck, just you</span>' +
     '<h1 class="giant">Adhkar Arcade</h1>' +
-    '<p class="lede">Spend the coins you earned from morning &amp; evening adhkar. Each attempt costs ' +
-    GAME_COST + ' coins.</p>';
+    '<p class="lede">Spend the coins you earned from morning &amp; evening adhkar, plus your arcade time. Each attempt costs ' +
+    GAME_COST + ' coins and needs time on the clock — every 10 dhikr in Practice earns 1:00.</p>';
   html += arcadeBalanceCard();
   html += '<div class="arcade-grid">';
   for (var i = 0; i < ARCADE_GAMES.length; i++) {
     (function (gm) {
       var best = arcadeHigh(gm.id);
       var unit = (gm.id === 'sprout' || gm.id === 'flip') ? 'm' : 'pts';
-      html += '<div class="card arcade-card"><div style="font-size:2.2rem">' + gm.emoji + '</div>' +
+      html += '<div class="card arcade-card">' + arcadeIconHtml(gm, 64) +
         '<h3>' + esc(gm.name) + '</h3><p class="muted">' + esc(gm.tag) + '</p>' +
         '<div class="arcade-best">Best: <b>' + fmtNum(best) + '</b> ' + unit + '</div>' +
         '<button class="btn-gold" data-arcade-open="' + gm.id + '">Play · ' + GAME_COST + ' 🪙</button></div>';
@@ -3763,9 +3968,768 @@ function refreshContent() {
 }
 window.addEventListener('dg-content-ready', refreshContent);
 
+/* ================= DHIKR BUDDY (companion) =================
+   One consistent companion across all themes. 500 levels (1 per 33 Practice
+   dhikr, 2 on Radiant Day), 10 visual stages, devolution after inactivity,
+   snack jar, 18 secret treasures, 5 interactions.
+   ALL day logic uses the LOCAL calendar date (todayKey) — never UTC. */
+var BUDDY_MAX_LEVEL = 500;
+var BUDDY_STAGE_NAMES = ['Newborn', 'Tiny', 'Curious', 'Playful', 'Bright', 'Brave', 'Shining', 'Radiant', 'Luminous', 'Celestial'];
+var BUDDY_STAGE_EMOJI = ['🌱', '🌿', '🍀', '🌷', '🌻', '🌺', '🌹', '🪷', '🌸', '💫'];
+var BUDDY_TREASURES = [
+  { id: 'tr-hat', name: 'Sunny Hat', emoji: '🎩' },
+  { id: 'tr-cap', name: 'Sporty Cap', emoji: '🧢' },
+  { id: 'tr-crown', name: 'Tiny Crown', emoji: '👑' },
+  { id: 'tr-bow', name: 'Ribbon Bow', emoji: '🎀' },
+  { id: 'tr-shades', name: 'Cool Shades', emoji: '🕶️' },
+  { id: 'tr-star', name: 'Star Charm', emoji: '🌟' },
+  { id: 'tr-gem', name: 'Sparkle Gem', emoji: '💎' },
+  { id: 'tr-balloon', name: 'Balloon Buddy', emoji: '🎈' },
+  { id: 'tr-rainbow', name: 'Rainbow Trail', emoji: '🌈' },
+  { id: 'tr-note', name: 'Melody Note', emoji: '🎵' },
+  { id: 'tr-moon', name: 'Moon Glow', emoji: '🌙' },
+  { id: 'tr-sun', name: 'Sunny Glow', emoji: '☀️' },
+  { id: 'tr-bfly', name: 'Butterfly Friend', emoji: '🦋' },
+  { id: 'tr-sparkle', name: 'Sparkle Dust', emoji: '💫' },
+  { id: 'tr-bell', name: 'Happy Bell', emoji: '🔔' },
+  { id: 'tr-honey', name: 'Honey Pot', emoji: '🍯' },
+  { id: 'tr-frame', name: 'Flower Frame', emoji: '🌼' },
+  { id: 'tr-aurora', name: 'Aurora Sky', emoji: '🌌' }
+];
+var BUDDY_TREASURE_DHIKR_STEPS = [100, 300, 600, 1000, 1500, 2200, 3000, 4000, 5500, 7500]; // hidden: lifetime taps
+var BUDDY_TREASURE_TIME_STEPS = [5, 15, 30, 60, 120, 240, 480, 720]; // hidden: minutes with buddy
+var BUDDY_TREATS = [
+  { id: 'glow', name: 'Honey Drop', emoji: '🍯', effect: 'golden glow' },
+  { id: 'trail', name: 'Star Berry', emoji: '🫐', effect: 'sparkle trail' },
+  { id: 'cheeks', name: 'Moon Melon', emoji: '🍈', effect: 'rainbow cheeks' }
+];
+function defaultBuddy() {
+  return {
+    name: 'Sprout', level: 1, snacks: 0,
+    lastActiveDay: null, dayDhikr: {}, radiantDay: null, radiantSince: 0,
+    devolveBlocks: 0, tucked: false,
+    treats: {}, treasures: [], treasurePool: [], treasureDhikrIdx: 0, treasureTimeIdx: 0,
+    tapTotal: 0, homeTimeMs: 0, equipped: [], puffUntil: 0
+  };
+}
+function shuffledTreasurePool() {
+  var ids = BUDDY_TREASURES.map(function (t) { return t.id; });
+  for (var i = ids.length - 1; i > 0; i--) {
+    var j = Math.floor(Math.random() * (i + 1));
+    var tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp;
+  }
+  return ids;
+}
+function buddy() {
+  if (!S.buddy || typeof S.buddy !== 'object' || Array.isArray(S.buddy)) S.buddy = defaultBuddy();
+  var b = S.buddy, d = defaultBuddy(), k;
+  for (k in d) { if (b[k] === undefined) b[k] = d[k]; }
+  if (typeof b.level !== 'number' || b.level < 1) b.level = 1;
+  if (b.level > BUDDY_MAX_LEVEL) b.level = BUDDY_MAX_LEVEL;
+  if (!Array.isArray(b.treasures)) b.treasures = [];
+  if (!Array.isArray(b.treasurePool)) b.treasurePool = [];
+  if (!Array.isArray(b.equipped)) b.equipped = [];
+  if (!b.dayDhikr || typeof b.dayDhikr !== 'object' || Array.isArray(b.dayDhikr)) b.dayDhikr = {};
+  if (!b.treats || typeof b.treats !== 'object' || Array.isArray(b.treats)) b.treats = {};
+  if (!b.treasurePool.length && !b.treasures.length) b.treasurePool = shuffledTreasurePool();
+  return b;
+}
+function buddyStage(level) {
+  level = Math.max(1, Math.min(BUDDY_MAX_LEVEL, Math.floor(Number(level) || 1)));
+  return Math.min(10, Math.max(1, Math.floor((level - 1) / 50) + 1));
+}
+function buddyStageName(level) { return BUDDY_STAGE_NAMES[buddyStage(level) - 1]; }
+function treasureById(id) {
+  for (var i = 0; i < BUDDY_TREASURES.length; i++) if (BUDDY_TREASURES[i].id === id) return BUDDY_TREASURES[i];
+  return null;
+}
+/* full days between two local day keys (b later than a) */
+function dayDiff(a, b) {
+  try {
+    var pa = String(a).split('-'), pb = String(b).split('-');
+    var da = new Date(+pa[0], +pa[1] - 1, +pa[2]);
+    var db = new Date(+pb[0], +pb[1] - 1, +pb[2]);
+    return Math.round((db - da) / 86400000);
+  } catch (e) { return 0; }
+}
+/* devolution: -10 levels per 3 inactive days, floor 1, no double-counting.
+   Inactive days = local day difference from last active day (today counts
+   once it is not yet active); day 2 shows the misses-you nudge instead. */
+function buddyCheckDevolution() {
+  var b = buddy();
+  var today = todayKey();
+  if (!b.lastActiveDay || b.lastActiveDay === today) { if (b.lastActiveDay === today) b.devolveBlocks = 0; return; }
+  var inactiveDays = Math.max(0, dayDiff(b.lastActiveDay, today));
+  var blocks = Math.floor(inactiveDays / 3);
+  var newBlocks = blocks - (Number(b.devolveBlocks) || 0);
+  if (newBlocks > 0) {
+    b.devolveBlocks = blocks;
+    b.level = Math.max(1, b.level - newBlocks * 10);
+    saveState();
+  }
+}
+function buddyMissesYou() {
+  var b = buddy();
+  var today = todayKey();
+  if (!b.lastActiveDay || b.lastActiveDay === today) return false;
+  return dayDiff(b.lastActiveDay, today) === 2; // day 2 of inactivity: gentle nudge
+}
+function buddySleepy() {
+  var b = buddy();
+  if (b.tucked) return true;
+  var today = todayKey();
+  return !!b.lastActiveDay && b.lastActiveDay !== today && (Number(b.dayDhikr[today]) || 0) < 33;
+}
+function buddyIsRadiant() { return buddy().radiantDay === todayKey(); }
+/* called once per counted Practice tap (both counters) */
+function buddyCountDhikr(n) {
+  var b = buddy();
+  var today = todayKey();
+  b.tapTotal = (Number(b.tapTotal) || 0) + n;
+  var before = Number(b.dayDhikr[today]) || 0;
+  b.dayDhikr[today] = before + n;
+  var keys = Object.keys(b.dayDhikr);
+  if (keys.length > 14) { keys.sort(); for (var i = 0; i < keys.length - 14; i++) delete b.dayDhikr[keys[i]]; }
+  if (before < 33 && b.dayDhikr[today] >= 33) {
+    b.lastActiveDay = today;
+    b.devolveBlocks = 0;
+    b.radiantDay = today;
+    b.radiantSince = Date.now();
+    saveState();
+    celebrate({ emoji: '✨', title: 'Radiant Day!', sub: b.name + ' glows golden and earns DOUBLE levels until midnight. Keep going! 🤲' });
+  }
+  buddyCheckTreasures();
+}
+function buddyGainLevels(n) {
+  var b = buddy();
+  var before = b.level;
+  b.level = Math.min(BUDDY_MAX_LEVEL, before + Math.max(0, Math.floor(n)));
+  return b.level - before;
+}
+/* secret treasures: hidden dhikr + time milestones, random no-duplicate order */
+function buddyCheckTreasures() {
+  var b = buddy();
+  var changed = false;
+  var di = Number(b.treasureDhikrIdx) || 0;
+  while (di < BUDDY_TREASURE_DHIKR_STEPS.length && (Number(b.tapTotal) || 0) >= BUDDY_TREASURE_DHIKR_STEPS[di]) {
+    di++;
+    if (buddyAwardTreasure()) changed = true;
+  }
+  b.treasureDhikrIdx = di;
+  var ti = Number(b.treasureTimeIdx) || 0;
+  var mins = (Number(b.homeTimeMs) || 0) / 60000;
+  while (ti < BUDDY_TREASURE_TIME_STEPS.length && mins >= BUDDY_TREASURE_TIME_STEPS[ti]) {
+    ti++;
+    if (buddyAwardTreasure()) changed = true;
+  }
+  b.treasureTimeIdx = ti;
+  if (changed) saveState();
+}
+function buddyAwardTreasure() {
+  var b = buddy();
+  if (!b.treasurePool.length) return false;
+  var id = b.treasurePool.shift();
+  b.treasures.push(id);
+  var t = treasureById(id);
+  celebrate({
+    emoji: '🎁',
+    title: 'A surprise gift appeared!',
+    sub: (t ? t.emoji + ' ' + t.name : 'A mystery treasure') + ' — see it in Treasures! (' + b.treasures.length + ' of 18 found)'
+  });
+  return true;
+}
+
+/* ---- buddy rendering ---- */
+function buddyThemeAccessory() {
+  var t = currentTheme();
+  if (t === 'highway') return '🥽';
+  if (t === 'mine') return '⛑️';
+  return '🌸';
+}
+function buddyActiveTreats() {
+  var b = buddy(), now = Date.now(), out = [], tr = b.treats || {}, k;
+  for (k in tr) { if (Number(tr[k]) > now) out.push(k); }
+  return out;
+}
+function buddyCharHtml() {
+  var b = buddy();
+  var stage = buddyStage(b.level);
+  var size = Math.round(56 * Math.min(1.26, 0.84 + (stage - 1) * 0.045));
+  var cls = 'buddy-char stage-' + stage;
+  var now = Date.now();
+  if (buddyIsRadiant()) cls += ' buddy-radiant';
+  if (b.puffUntil && Number(b.puffUntil) > now) cls += ' buddy-puff';
+  var treats = buddyActiveTreats();
+  if (treats.indexOf('glow') >= 0) cls += ' treat-glow';
+  if (treats.indexOf('trail') >= 0) cls += ' treat-trail';
+  if (treats.indexOf('cheeks') >= 0) cls += ' treat-cheeks';
+  var html = '<div class="' + cls + '" data-buddy-tap="1" role="button" tabindex="0" aria-label="' + esc(b.name) + ', your companion, level ' + b.level + '">';
+  html += '<span class="buddy-emoji" style="font-size:' + size + 'px">' + BUDDY_STAGE_EMOJI[stage - 1] + '</span>';
+  html += '<span class="buddy-accessory">' + buddyThemeAccessory() + '</span>';
+  var eq = b.equipped || [], shown = 0;
+  if (eq.length) {
+    html += '<span class="buddy-equipped">';
+    for (var i = 0; i < eq.length && shown < 3; i++) {
+      var t = treasureById(eq[i]);
+      if (t) { html += '<span>' + t.emoji + '</span>'; shown++; }
+    }
+    html += '</span>';
+  }
+  if (buddySleepy()) html += '<span class="buddy-zzz">💤</span>';
+  html += '</div>';
+  return html;
+}
+function buddyWiggle(char) {
+  if (!char) return;
+  char.classList.remove('buddy-wiggle');
+  void char.offsetWidth;
+  char.classList.add('buddy-wiggle');
+}
+function buddySparkle(wrap, x, y) {
+  if (!wrap) return;
+  var s = document.createElement('span');
+  s.className = 'buddy-sparkle';
+  s.textContent = '✨';
+  s.style.left = x + 'px';
+  s.style.top = y + 'px';
+  wrap.appendChild(s);
+  setTimeout(function () { if (s.parentNode) s.parentNode.removeChild(s); }, 900);
+}
+function buddyCareLabel() {
+  var t = currentTheme();
+  if (t === 'highway') return 'Polish';
+  if (t === 'mine') return 'Brush';
+  return 'Water';
+}
+function buddyXpBarHtml(slim) {
+  var b = buddy();
+  var pct = Math.min(100, (b.level / BUDDY_MAX_LEVEL) * 100);
+  return '<div class="buddy-xp' + (slim ? ' slim' : '') + '" role="progressbar" aria-valuenow="' + b.level + '" aria-valuemax="' + BUDDY_MAX_LEVEL + '">' +
+    '<div class="buddy-xp-fill" style="width:' + pct.toFixed(1) + '%"></div></div>';
+}
+/* Road to 500: winding path, 10 sealed "?" chests at 50..500, traveling pin */
+function roadTo500Html() {
+  var b = buddy();
+  var html = '<div class="card"><span class="kicker k-gold">Road to 500</span><div class="road">';
+  for (var s = 1; s <= 10; s++) {
+    var lvl = s * 50;
+    var reached = b.level >= lvl;
+    var isCurrent = buddyStage(b.level) === s;
+    html += '<div class="road-node' + (s % 2 ? ' left' : ' right') + (reached ? ' open' : '') + (isCurrent ? ' current' : '') + '">' +
+      '<div class="road-chest">' + (reached ? '⭐' : '?') + '</div>' +
+      '<div class="road-lvl">' + lvl + '</div>' +
+      (isCurrent ? '<div class="road-pin">📍 Lv ' + b.level + '</div>' : '') +
+      '</div>';
+  }
+  html += '</div>';
+  var next = Math.min(500, (Math.floor(b.level / 50) + 1) * 50);
+  html += '<p class="muted" style="text-align:center;margin-bottom:0">Next mystery chest at level ' + next + ' — ' + Math.max(0, next - b.level) + ' to go</p></div>';
+  return html;
+}
+function treasuresHtml() {
+  var b = buddy();
+  var html = '<div class="card"><div class="row-between" style="align-items:center"><div>' +
+    '<span class="kicker k-gold">Treasures</span>' +
+    '<h3 style="margin:4px 0 0">' + b.treasures.length + ' of 18 found</h3></div></div>' +
+    '<div class="treasure-grid">';
+  for (var i = 0; i < b.treasures.length; i++) {
+    var t = treasureById(b.treasures[i]);
+    if (!t) continue;
+    var active = (b.equipped || []).indexOf(t.id) >= 0;
+    html += '<button class="treasure' + (active ? ' active' : '') + '" data-treasure="' + t.id + '">' +
+      '<span>' + t.emoji + '</span><b>' + esc(t.name) + '</b><i>' + (active ? 'On' : 'Tap to wear') + '</i></button>';
+  }
+  for (var k = b.treasures.length; k < 18; k++) {
+    html += '<div class="treasure secret"><span>?</span><b>Secret</b></div>';
+  }
+  html += '</div><p class="muted" style="margin-bottom:0">Secret gifts appear as you do dhikr and spend time with your buddy.</p></div>';
+  return html;
+}
+/* compact home preview */
+function buddyPreviewHtml() {
+  var b = buddy();
+  return '<section class="card buddy-preview"><div class="row-between" style="align-items:center;gap:10px">' +
+    '<div style="display:flex;align-items:center;gap:12px;min-width:0">' +
+    '<div class="buddy-mini">' + buddyCharHtml() + '</div>' +
+    '<div style="min-width:0"><b>' + esc(b.name) + '</b>' +
+    '<div class="muted">Level ' + b.level + ' of 500 · ' + esc(buddyStageName(b.level)) + '</div>' +
+    buddyXpBarHtml(true) + '</div></div>' +
+    '<button class="btn-gold" data-go-companion style="flex:0 0 auto">Visit companion →</button>' +
+    '</div></section>';
+}
+/* ---- companion screen ---- */
+function renderCompanion() {
+  var sec = el('screen-companion');
+  if (!sec) return;
+  buddyCheckDevolution();
+  var b = buddy();
+  var html = '<button class="backlink" data-go="home">← Home</button>' +
+    '<span class="kicker k-sage">Your companion</span>' +
+    '<h1 class="giant">' + esc(b.name) + '</h1>';
+  html += '<section class="card companion-stage"><div class="companion-scene" id="companion-scene">' + buddyCharHtml() + '</div>' +
+    '<div style="text-align:center"><div class="buddy-name">' + esc(b.name) + ' · Level ' + b.level + ' of 500</div>' +
+    '<div class="buddy-stage">' + esc(buddyStageName(b.level)) + ' · Stage ' + buddyStage(b.level) + ' of 10</div></div>' +
+    buddyXpBarHtml(false);
+  if (buddyIsRadiant()) html += '<p class="kicker k-gold" style="text-align:center">✨ Radiant Day — double levels till midnight</p>';
+  else if (buddyMissesYou()) html += '<p class="muted" style="text-align:center">Your companion misses you 💛</p>';
+  html += '<div class="btn-row" style="justify-content:center"><button class="btn-ghost" data-buddy-rename>Rename</button></div></section>';
+  html += '<section class="card"><span class="kicker k-sage">Care</span><div class="buddy-tiles">' +
+    '<button class="tile" data-buddy-rub>💧<b>' + esc(buddyCareLabel()) + '</b><i>rub gently</i></button>' +
+    '<button class="tile" data-buddy-treats>🍯<b>Treats</b><i>1-hour magic</i></button>' +
+    '<button class="tile" data-buddy-sleep>' + (b.tucked ? '🌅' : '🌙') + '<b>' + (b.tucked ? 'Wake up' : 'Goodnight') + '</b><i>' + (b.tucked ? 'rise & shine' : 'tuck in') + '</i></button>' +
+    '<button class="tile" data-buddy-fetch>⭐<b>Star fetch</b><i>play together</i></button>' +
+    '</div></section>';
+  html += '<section class="card"><div class="row-between" style="align-items:center"><div>' +
+    '<span class="kicker k-gold">🍯 Snack jar</span>' +
+    '<div style="font-size:1.6rem;font-weight:900"><span id="snack-count">' + fmtNum(b.snacks) + '</span> <small class="muted">snacks</small></div></div>' +
+    '<button class="btn-gold" data-buddy-feed' + (b.snacks >= 10 ? '' : ' disabled') + '>Feed · 10 🍯</button></div>' +
+    '<p class="muted" style="margin:8px 0 0">Feeding is just for fun — ' + esc(b.name) + ' grows from your dhikr, not from snacks.</p></section>';
+  html += roadTo500Html();
+  html += treasuresHtml();
+  sec.innerHTML = html;
+  var gos = sec.querySelectorAll('[data-go]');
+  for (var g = 0; g < gos.length; g++) {
+    (function (x) { x.addEventListener('click', function () { showScreen(x.getAttribute('data-go')); }); })(gos[g]);
+  }
+  wireBuddyScene(sec);
+  var rn = sec.querySelector('[data-buddy-rename]');
+  if (rn) rn.addEventListener('click', buddyRenameModal);
+  var rub = sec.querySelector('[data-buddy-rub]');
+  if (rub) rub.addEventListener('click', function () { toast(buddyCareLabel() + ' your buddy — rub them gently! 💛'); wireBuddyRubHint(sec); });
+  var tr = sec.querySelector('[data-buddy-treats]');
+  if (tr) tr.addEventListener('click', buddyTreatPicker);
+  var sl = sec.querySelector('[data-buddy-sleep]');
+  if (sl) sl.addEventListener('click', function () {
+    var bb = buddy();
+    bb.tucked = !bb.tucked;
+    saveState();
+    renderCompanion();
+    toast(bb.tucked ? 'Goodnight! 🌙' : 'Good morning! ☀️');
+  });
+  var ft = sec.querySelector('[data-buddy-fetch]');
+  if (ft) ft.addEventListener('click', function () { buddyStarFetch(sec); });
+  var fd = sec.querySelector('[data-buddy-feed]');
+  if (fd) fd.addEventListener('click', function () { buddyFeed(sec); });
+  var trs = sec.querySelectorAll('[data-treasure]');
+  for (var ti = 0; ti < trs.length; ti++) {
+    (function (x) {
+      x.addEventListener('click', function () {
+        var bb = buddy();
+        var id = x.getAttribute('data-treasure');
+        var ix = bb.equipped.indexOf(id);
+        if (ix >= 0) bb.equipped.splice(ix, 1); else bb.equipped.push(id);
+        saveState();
+        renderCompanion();
+      });
+    })(trs[ti]);
+  }
+}
+/* tap = wiggle (wakes if tucked); rub = pointer drag with sparkles */
+function wireBuddyScene(scope) {
+  var chars = scope.querySelectorAll('[data-buddy-tap]');
+  for (var i = 0; i < chars.length; i++) {
+    (function (char) {
+      var rubbing = false;
+      char.addEventListener('pointerdown', function (e) {
+        rubbing = true;
+        buddyWiggle(char);
+        var r = char.getBoundingClientRect(), w = char.closest('.buddy-wrap') || char.parentNode;
+        var wr = w.getBoundingClientRect();
+        buddySparkle(w, e.clientX - wr.left, e.clientY - wr.top);
+      });
+      char.addEventListener('pointermove', function (e) {
+        if (!rubbing) return;
+        var w = char.closest('.buddy-wrap') || char.parentNode;
+        var wr = w.getBoundingClientRect();
+        buddySparkle(w, e.clientX - wr.left, e.clientY - wr.top);
+      });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(function (ev) {
+        char.addEventListener(ev, function () { rubbing = false; });
+      });
+      char.addEventListener('click', function () {
+        var b = buddy();
+        if (b.tucked) {
+          b.tucked = false;
+          saveState();
+          toast('Good morning! ☀️');
+          if (scope.id === 'screen-companion') renderCompanion();
+          else showScreen('home');
+          return;
+        }
+        buddyWiggle(char);
+      });
+      char.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); char.click(); }
+      });
+    })(chars[i]);
+  }
+}
+function wireBuddyRubHint(scope) {
+  var char = scope.querySelector('[data-buddy-tap]');
+  if (char) { buddyWiggle(char); toast('Rub ' + buddy().name + ' gently with your finger 💛'); }
+}
+function buddyFeed(scope) {
+  var b = buddy();
+  if ((Number(b.snacks) || 0) < 10) { toast('Not enough snacks 🍯 — earn 10 per 10 dhikr!'); return; }
+  b.snacks -= 10;
+  b.puffUntil = Date.now() + 4000;
+  saveState();
+  var sc = el('snack-count');
+  if (sc) sc.textContent = fmtNum(b.snacks);
+  var fd = scope.querySelector('[data-buddy-feed]');
+  if (fd && b.snacks < 10) fd.disabled = true;
+  var char = scope.querySelector('[data-buddy-tap]');
+  if (char) {
+    char.classList.add('buddy-puff');
+    buddyWiggle(char);
+    setTimeout(function () { char.classList.remove('buddy-puff'); }, 4200);
+  }
+  toast('Yum! 😋');
+}
+function buddyTreatPicker() {
+  var ov = document.createElement('div');
+  ov.className = 'gate-backdrop';
+  ov.id = 'treat-picker';
+  var html = '<div class="gate-modal" role="dialog" aria-modal="true" aria-label="Treat picker">' +
+    '<div style="font-size:2.4rem">🍯</div><h2>Pick a treat</h2>' +
+    '<p class="muted">Free &amp; unlimited — each gives a fun 1-hour effect.</p>';
+  for (var i = 0; i < BUDDY_TREATS.length; i++) {
+    (function (t) {
+      html += '<button class="btn-gold btn-block treat-pick" data-treat="' + t.id + '" style="margin-top:8px">' +
+        t.emoji + ' ' + esc(t.name) + ' <small>· ' + esc(t.effect) + '</small></button>';
+    })(BUDDY_TREATS[i]);
+  }
+  html += '<button class="btn-ghost btn-block" id="treat-close" style="margin-top:8px">Not now</button></div>';
+  ov.innerHTML = html;
+  document.body.appendChild(ov);
+  function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+  el('treat-close').addEventListener('click', close);
+  ov.addEventListener('click', function (e) { if (e.target === ov) close(); });
+  var picks = ov.querySelectorAll('[data-treat]');
+  for (var k = 0; k < picks.length; k++) {
+    (function (x) {
+      x.addEventListener('click', function () {
+        var b = buddy();
+        b.treats[x.getAttribute('data-treat')] = Date.now() + 3600000;
+        saveState();
+        close();
+        toast('Magical treat! ✨ (1 hour)');
+        if (currentScreen === 'companion') renderCompanion();
+      });
+    })(picks[k]);
+  }
+}
+function buddyStarFetch(scope) {
+  var scene = scope.querySelector('#companion-scene') || scope.querySelector('.buddy-wrap');
+  if (!scene) return;
+  if (scene.querySelector('.fetch-star')) return;
+  var star = document.createElement('span');
+  star.className = 'fetch-star';
+  star.textContent = '⭐';
+  scene.appendChild(star);
+  var char = scope.querySelector('[data-buddy-tap]');
+  setTimeout(function () { if (char) char.classList.add('buddy-hop'); }, 450);
+  setTimeout(function () {
+    if (star.parentNode) star.parentNode.removeChild(star);
+    if (char) char.classList.remove('buddy-hop');
+    buddyWiggle(char);
+    toast('Good catch! ⭐');
+  }, 1600);
+}
+function buddyRenameModal() {
+  var b = buddy();
+  var ov = document.createElement('div');
+  ov.className = 'gate-backdrop';
+  ov.id = 'rename-modal';
+  ov.innerHTML = '<div class="gate-modal" role="dialog" aria-modal="true" aria-label="Rename companion">' +
+    '<div style="font-size:2.4rem">✏️</div><h2>Name your companion</h2>' +
+    '<input id="rename-input" class="rename-input" maxlength="24" value="' + esc(b.name) + '" />' +
+    '<div class="btn-row" style="justify-content:center;margin-top:12px">' +
+    '<button class="btn-gold" id="rename-save">Save</button>' +
+    '<button class="btn-ghost" id="rename-cancel">Cancel</button></div></div>';
+  document.body.appendChild(ov);
+  function close() { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+  function save() {
+    var v = el('rename-input').value.trim().slice(0, 24);
+    if (v) { buddy().name = v; saveState(); }
+    close();
+    if (currentScreen === 'companion') renderCompanion();
+    else showScreen('home');
+  }
+  el('rename-save').addEventListener('click', save);
+  el('rename-cancel').addEventListener('click', close);
+  el('rename-input').addEventListener('keydown', function (e) { if (e.key === 'Enter') save(); });
+  setTimeout(function () { var i = el('rename-input'); if (i) i.focus(); }, 50);
+}
+
+/* ================= ARCADE LOSS GATE =================
+   When any arcade attempt ends, a non-dismissable modal requires 10 taps of
+   "La ilaha illa Allah" (Arabic + transliteration) before the next game.
+   1s pacing between taps (faster taps ignored with a hint); live elapsed
+   readout; clears at 10/10. Gate taps earn nothing. */
+var gateState = null;
+function arcadeLossGate() {
+  if (gateState) return;
+  var ov = document.createElement('div');
+  ov.id = 'dhikr-gate';
+  ov.className = 'gate-backdrop';
+  ov.innerHTML =
+    '<div class="gate-modal" role="dialog" aria-modal="true" aria-label="Dhikr gate">' +
+    '<div style="font-size:2.4rem">🤲</div>' +
+    '<h2>Before your next game…</h2>' +
+    '<p class="muted">Say <b>La ilaha illa Allah</b> 10 times</p>' +
+    arabicBlock('لَا إِلَهَ إِلَّا اللَّهُ', 'arabic-mid') +
+    '<div class="gate-count"><b id="gate-num">0</b><span> / 10</span></div>' +
+    '<div class="gate-elapsed">⏱ <span id="gate-elapsed">0:00</span> elapsed</div>' +
+    '<button class="btn-gold btn-block" id="gate-tap" style="font-size:1.25rem;padding:18px">Tap · one recitation</button>' +
+    '<p class="muted" id="gate-hint" style="min-height:1.4em"></p>' +
+    '</div>';
+  document.body.appendChild(ov);
+  gateState = { n: 0, t0: 0, lastTap: 0, timer: 0, ov: ov };
+  gateState.timer = setInterval(function () {
+    if (!gateState) return;
+    var s = gateState.t0 ? Math.floor((Date.now() - gateState.t0) / 1000) : 0;
+    var e = el('gate-elapsed');
+    if (e) e.textContent = Math.floor(s / 60) + ':' + pad2(s % 60);
+  }, 250);
+  el('gate-tap').addEventListener('click', gateTap);
+}
+function gateTap() {
+  if (!gateState) return;
+  var now = Date.now();
+  if (gateState.lastTap && now - gateState.lastTap < 1000) {
+    var h = el('gate-hint');
+    if (h) h.textContent = 'Slow down — one tap each second 🤲';
+    return;
+  }
+  gateState.lastTap = now;
+  if (!gateState.t0) gateState.t0 = now;
+  gateState.n++;
+  var num = el('gate-num');
+  if (num) num.textContent = gateState.n;
+  var h2 = el('gate-hint');
+  if (h2) h2.textContent = '';
+  if (gateState.n >= 10) gateClose();
+}
+function gateClose() {
+  if (gateState && gateState.timer) { try { clearInterval(gateState.timer); } catch (e) {} }
+  if (gateState && gateState.ov && gateState.ov.parentNode) gateState.ov.parentNode.removeChild(gateState.ov);
+  gateState = null;
+}
+
+function stopBloom() {
+  if (bloomG) { try { cancelAnimationFrame(bloomG.raf); } catch (e) {} }
+  bloomG = null;
+}
+/* ================= BLOOM TENDER =================
+   Home-screen garden game (NOT in the arcade): 5 coins per 30-drop round.
+   Tap falling water drops to grow the player's own collected blooms
+   bud → sprout → bloom. 100 pts per completed bloom, own high score,
+   misses fade with no penalty, fixed seeded drop patterns (no chance). */
+var bloomG = null;
+function bloomCollected() {
+  var seen = {}, out = [], i, f, key;
+  for (i = 0; i < S.garden.length; i++) {
+    f = S.garden[i];
+    key = (f.name || '') + '|' + (f.emoji || '');
+    if (f.emoji && !seen[key]) { seen[key] = 1; out.push({ name: f.name || 'Bloom', emoji: f.emoji }); }
+  }
+  if (!out.length) out.push({ name: 'Garden Bloom', emoji: '🌸' });
+  return out.slice(0, 6);
+}
+function renderBloom() {
+  var sec = el('screen-bloom');
+  if (!sec) return;
+  if (bloomG) { try { cancelAnimationFrame(bloomG.raf); } catch (e) {} bloomG = null; }
+  var html = '<button class="backlink" data-go="home">← Home</button>' +
+    '<span class="kicker k-sage">Tend your blooms</span>' +
+    '<h1 class="giant">Bloom Tender</h1>' +
+    '<p class="lede">Tap falling water drops to grow <b>your own</b> collected blooms — bud → sprout → bloom. ' +
+    '30 drops per round, 100 points per finished bloom. Misses just fade away.</p>' +
+    '<div class="card"><div class="row-between" style="align-items:center"><div>' +
+    '<span class="kicker k-sage">Best</span>' +
+    '<div style="font-size:1.6rem;font-weight:900;color:var(--cream)">' + fmtNum(S.bloomHigh) + ' pts</div></div>' +
+    '<button class="btn-gold" id="bloom-start">Play · ' + GAME_COST + ' 🪙</button></div>' +
+    '<p class="muted" style="margin:8px 0 0">Coins only — no arcade time needed.</p></div>' +
+    '<div class="card" id="bloom-wrap" hidden><canvas id="bloom-canvas" class="game-canvas"></canvas>' +
+    '<div id="bloom-over" hidden></div></div>';
+  sec.innerHTML = html;
+  var gos = sec.querySelectorAll('[data-go]');
+  for (var g = 0; g < gos.length; g++) {
+    (function (x) { x.addEventListener('click', function () { showScreen(x.getAttribute('data-go')); }); })(gos[g]);
+  }
+  var st = el('bloom-start');
+  if (st) st.addEventListener('click', startBloomRun);
+}
+function startBloomRun() {
+  if ((Number(S.credits) || 0) < GAME_COST) { toast('Not enough credits yet 🪙'); return; }
+  S.credits -= GAME_COST;
+  S.bloomAttempts = (Number(S.bloomAttempts) || 0) + 1;
+  saveState();
+  var wrap = el('bloom-wrap');
+  if (wrap) wrap.hidden = false;
+  var over = el('bloom-over');
+  if (over) over.hidden = true;
+  var setup = arcadeCanvas('bloom-wrap', 'bloom-canvas', 480);
+  if (!setup) return;
+  var st = el('bloom-start');
+  if (st) st.style.display = 'none';
+  var blooms = bloomCollected();
+  var seed = (S.bloomAttempts * 2654435761 + 97) % 2147483647;
+  if (seed <= 0) seed += 2147483646;
+  function rnd() { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
+  var G = {
+    ctx: setup.ctx, W: setup.W, H: setup.H, canvas: setup.canvas,
+    blooms: blooms, bi: 0, stage: 0,
+    drops: [], spawned: 0, spawnT: 0, score: 0, finished: 0,
+    raf: 0, over: false, splash: null, rnd: rnd
+  };
+  bloomG = G;
+  try { wrap.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+  setup.canvas.onpointerdown = function (e) { bloomTap(e, G); };
+  (function loop() {
+    if (!bloomG || bloomG !== G || G.over) return;
+    bloomStep(G, 1 / 60);
+    bloomDraw(G);
+    G.raf = requestAnimationFrame(loop);
+  })();
+}
+function bloomSpawn(G) {
+  G.drops.push({
+    x: 34 + G.rnd() * (G.W - 68),
+    y: -24,
+    vy: 120 + G.rnd() * 90,
+    hit: 0, miss: 0
+  });
+  G.spawned++;
+}
+function bloomStep(G, dt) {
+  G.spawnT += dt;
+  if (G.spawned < 30 && G.spawnT >= 2.6) { G.spawnT = 0; bloomSpawn(G); }
+  var i, d;
+  for (i = G.drops.length - 1; i >= 0; i--) {
+    d = G.drops[i];
+    if (d.hit > 0) { d.hit += dt; if (d.hit > 0.5) G.drops.splice(i, 1); continue; }
+    if (d.miss > 0) { d.miss += dt; if (d.miss > 0.6) G.drops.splice(i, 1); continue; }
+    d.y += d.vy * dt;
+    if (d.y > G.H + 24) { d.miss = 0.001; }
+  }
+  if (G.splash && (Date.now() - G.splash > 600)) G.splash = null;
+  if (G.spawned >= 30 && !G.drops.length) bloomGameOver(G);
+}
+function bloomTap(e, G) {
+  if (!G || G.over) return;
+  var r = G.canvas.getBoundingClientRect();
+  var x = (e.clientX - r.left) * (G.W / r.width);
+  var y = (e.clientY - r.top) * (G.H / r.height);
+  for (var i = 0; i < G.drops.length; i++) {
+    var d = G.drops[i];
+    if (d.hit > 0 || d.miss > 0) continue;
+    var dx = d.x - x, dy = d.y - y;
+    if (dx * dx + dy * dy < 48 * 48) {
+      d.hit = 0.001;
+      G.splash = Date.now();
+      G.stage++;
+      if (G.stage >= 3) {
+        G.stage = 0;
+        G.finished++;
+        G.score += 100;
+        G.bi = (G.bi + 1) % G.blooms.length;
+      }
+      return;
+    }
+  }
+}
+function bloomDraw(G) {
+  var ctx = G.ctx, W = G.W, H = G.H, i, d;
+  var grd = ctx.createLinearGradient(0, 0, 0, H);
+  grd.addColorStop(0, '#16281d'); grd.addColorStop(1, '#0b100e');
+  ctx.fillStyle = grd;
+  ctx.fillRect(0, 0, W, H);
+  // current bloom at the bottom
+  var b = G.blooms[G.bi % G.blooms.length];
+  var face = G.stage === 0 ? '🌱' : (G.stage === 1 ? '🌿' : b.emoji);
+  var fs = G.stage === 0 ? 40 : (G.stage === 1 ? 52 : 76);
+  ctx.font = fs + 'px serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(face, W / 2, H - 90);
+  ctx.font = '600 14px sans-serif';
+  ctx.fillStyle = '#cfe3d4';
+  ctx.fillText(b.name + (G.stage < 2 ? ' · growing…' : ' · bloomed!'), W / 2, H - 36);
+  // drops
+  for (i = 0; i < G.drops.length; i++) {
+    d = G.drops[i];
+    if (d.hit > 0) {
+      ctx.globalAlpha = Math.max(0, 1 - d.hit * 2);
+      ctx.font = '30px serif';
+      ctx.fillText('💦', d.x, d.y);
+      ctx.globalAlpha = 1;
+    } else if (d.miss > 0) {
+      ctx.globalAlpha = Math.max(0, 0.7 - d.miss);
+      ctx.font = '26px serif';
+      ctx.fillText('💧', d.x, d.y);
+      ctx.globalAlpha = 1;
+    } else {
+      ctx.font = '28px serif';
+      ctx.fillText('💧', d.x, d.y);
+    }
+  }
+  // HUD
+  ctx.font = '700 18px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillText('✨ ' + G.score, 14, 12);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#9db8a4';
+  ctx.fillText('💧 ' + Math.min(30, G.spawned) + '/30', W - 14, 12);
+}
+function bloomGameOver(G) {
+  if (G.over) return;
+  G.over = true;
+  if (bloomG === G) bloomG = null;
+  G.canvas.onpointerdown = null;
+  var isBest = false;
+  if (G.score > (Number(S.bloomHigh) || 0)) { S.bloomHigh = G.score; isBest = true; }
+  saveState();
+  var over = el('bloom-over');
+  if (!over) return;
+  var canAfford = (Number(S.credits) || 0) >= GAME_COST;
+  over.innerHTML = '<div class="sprout-result"><div style="font-size:2.6rem">🌸</div>' +
+    '<h2>' + (isBest ? 'New best!' : 'Round over!') + '</h2>' +
+    '<div class="sprout-score">' + fmtNum(G.score) + ' <small style="font-size:1rem;color:var(--sage)">pts</small></div>' +
+    '<p class="muted">' + G.finished + ' blooms finished · Best: ' + fmtNum(S.bloomHigh) + ' pts</p>' +
+    '<div class="btn-row" style="justify-content:center">' +
+    '<button class="btn-gold" id="bloom-again"' + (canAfford ? '' : ' disabled') + '>' +
+    (canAfford ? 'Play again · ' + GAME_COST + ' 🪙' : 'Need ' + GAME_COST + ' 🪙 to play') + '</button>' +
+    '<button class="btn-ghost" id="bloom-done">Done</button></div></div>';
+  over.hidden = false;
+  var ag = el('bloom-again');
+  if (ag && canAfford) ag.addEventListener('click', startBloomRun);
+  var dn = el('bloom-done');
+  if (dn) dn.addEventListener('click', function () { showScreen('home'); });
+  if (isBest) {
+    try { celebrate({ emoji: '🌸', title: 'New best tending!', sub: fmtNum(G.score) + ' points — alhamdulillah!' }); } catch (e) {}
+  }
+}
+
+/* time-with-buddy: accrues on home + companion screens (hidden treasure milestones) */
+var buddyScreenT0 = 0;
+function buddyTrackScreen(nextName) {
+  try {
+    if (buddyScreenT0 && (currentScreen === 'home' || currentScreen === 'companion')) {
+      var b = buddy();
+      b.homeTimeMs = (Number(b.homeTimeMs) || 0) + (Date.now() - buddyScreenT0);
+      buddyCheckTreasures();
+      saveState();
+    }
+  } catch (e) { /* never break navigation */ }
+  buddyScreenT0 = (nextName === 'home' || nextName === 'companion') ? Date.now() : 0;
+}
+
 /* ---------------- boot ---------------- */
 function boot() {
   try { migrateChecklistKeys(); } catch (e) { /* migration optional */ }
+  try { buddy(); buddyCheckDevolution(); } catch (e) { /* buddy optional */ }
   try { refreshPrayers(); } catch (e) { /* prayers optional */ }
   try { applyAmbience(); } catch (e) { /* ambience optional */ }
   wireNav();
@@ -3776,6 +4740,18 @@ function boot() {
   // re-tint periodically while the app stays open
   try {
     setInterval(function () { refreshPrayers(); applyAmbience(); }, 15 * 60 * 1000);
+  } catch (e) { /* timers optional */ }
+  // buddy time-with-pet tracking (hidden treasure milestones)
+  try {
+    setInterval(function () {
+      if ((currentScreen === 'home' || currentScreen === 'companion') && buddyScreenT0) {
+        var b = buddy();
+        b.homeTimeMs = (Number(b.homeTimeMs) || 0) + (Date.now() - buddyScreenT0);
+        buddyScreenT0 = Date.now();
+        buddyCheckTreasures();
+        saveState();
+      }
+    }, 30000);
   } catch (e) { /* timers optional */ }
   // service worker (offline shell) — same-directory scope only
   try {

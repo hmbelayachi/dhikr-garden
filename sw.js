@@ -3,7 +3,7 @@
    (e.g. https://user.github.io/repo/). Scope is the worker's own directory. */
 'use strict';
 
-var CACHE = 'dhikr-garden-v14';
+var CACHE = 'dhikr-garden-v18';
 var SHELL = [
   './',
   'index.html',
@@ -15,6 +15,8 @@ var SHELL = [
   'icon-512.png',
   'icon-maskable-512.png',
   'apple-touch-icon.png',
+  'char-sprout.png',
+  'char-flip.png',
   'audio/ya-hayyu-ya-qayyum.mp3',
   'audio/ayat-al-kursi.mp3',
   'audio/hasbiyallah.mp3',
@@ -24,7 +26,8 @@ var SHELL = [
   'audio/la-ilaha-wahdahu.mp3',
   'audio/ushhiduk.mp3',
   'audio/alim-al-ghayb.mp3',
-  'audio/sayyid-istighfar.mp3'
+  'audio/sayyid-istighfar.mp3',
+  'audio/bismillahil-ladhi.mp3'
 ];
 
 self.addEventListener('install', function (event) {
