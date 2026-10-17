@@ -1675,6 +1675,8 @@ function renderHome() {
     S.location = { granted: false };
     saveState(); renderHome();
   });
+  try { buddySpawnMotes(sec.querySelector('.buddy-env-scene')); } catch (e) { /* buddy optional */ }
+  buddyFlushPending(sec);
 }
 
 /* ---------------- location: asked ONCE ---------------- */
@@ -1778,7 +1780,11 @@ function awardLevelMilestone(which) {
   var gained = buddyGainLevels(lvGain);
   buddyCheckTreasures();
   saveState();
-  if (gained > 0) toast('+' + gained + ' companion level 🌱 · Level ' + fmtNum(buddy().level) + ' of 500');
+  if (gained > 0) {
+    toast('+' + gained + ' companion level 🌱 · Level ' + fmtNum(buddy().level) + ' of 500');
+    var lc = buddyVisibleChar();
+    if (lc) { buddyPlayAnim(lc, 'buddy-alevel'); buddyFx(lc, ['✨', '🌟', '💛'], 10, 'burst'); }
+  }
 }
 
 function practiceOptions() {
@@ -4149,6 +4155,8 @@ function buddyAwardTreasure() {
     title: 'A surprise gift appeared!',
     sub: (t ? t.emoji + ' ' + t.name : 'A mystery treasure') + ' — see it in Treasures! (' + b.treasures.length + ' of 18 found)'
   });
+  var tc = buddyVisibleChar();
+  if (tc) { buddyPlayAnim(tc, 'buddy-acelebrate'); buddyFx(tc, ['🎉', '✨', '🌟', '💛'], 10, 'burst'); }
   return true;
 }
 
@@ -4183,8 +4191,12 @@ function buddyCharHtml(sizeBase) {
   if (treats.indexOf('glow') >= 0) cls += ' treat-glow';
   if (treats.indexOf('trail') >= 0) cls += ' treat-trail';
   if (treats.indexOf('cheeks') >= 0) cls += ' treat-cheeks';
+  if (b.tucked) cls += ' buddy-sleeping';
   var html = '<div class="' + cls + '" data-buddy-tap="1" role="button" tabindex="0" aria-label="' + esc(b.name) + ', your companion, level ' + b.level + '">';
+  html += '<span class="buddy-idle"><span class="buddy-motion">';
   html += '<span class="buddy-emoji"><img class="buddy-img" src="buddy.png" alt="' + esc(b.name) + '" style="width:' + size + 'px;height:' + size + 'px">' + buddyHatImgHtml(size) + '</span>';
+  html += '<span class="buddy-blink" aria-hidden="true"><i></i><i></i></span>';
+  html += '</span></span>';
   html += '<span class="buddy-accessory">' + buddyThemeAccessory() + '</span>';
   var eq = b.equipped || [], shown = 0;
   if (eq.length) {
@@ -4200,11 +4212,97 @@ function buddyCharHtml(sizeBase) {
   html += '</div>';
   return html;
 }
-function buddyWiggle(char) {
-  if (!char) return;
-  char.classList.remove('buddy-wiggle');
+/* ---- buddy motion helpers: one-shot interaction animations + particles ----
+   Layering (each layer carries at most one animation so states compose):
+   .buddy-idle   — always-on idle bob + breathe (slowed when sleeping)
+   .buddy-motion — one-shot interaction animations (tap, feed, rub, twirl…)
+   .buddy-emoji  — feed puff-up scale + radiant/treat glow filters */
+var BUDDY_ONE_SHOTS = ['buddy-atap', 'buddy-afeed', 'buddy-arub', 'buddy-atreat', 'buddy-awake', 'buddy-achase', 'buddy-alevel', 'buddy-acelebrate'];
+var BUDDY_FX_MAX = 24; /* particle cap per buddy for performance */
+function buddyPlayAnim(char, cls) {
+  if (!char || !char.classList) return;
+  char.classList.remove(cls);
   void char.offsetWidth;
-  char.classList.add('buddy-wiggle');
+  char.classList.add(cls);
+}
+function buddyVisibleChar() {
+  var chars = document.querySelectorAll('[data-buddy-tap]');
+  for (var i = 0; i < chars.length; i++) {
+    try {
+      var r = chars[i].getBoundingClientRect();
+      if (r && r.width > 0 && r.height > 0) return chars[i];
+    } catch (e) { /* ignore */ }
+  }
+  return chars.length ? chars[0] : null;
+}
+/* spawn lightweight particle spans (transform/opacity only); mode 'rise'|'burst' */
+function buddyFx(char, glyphs, n, mode) {
+  if (!char || !char.appendChild || !glyphs || !glyphs.length) return;
+  var live = 0;
+  try { live = char.querySelectorAll('.buddy-fx').length; } catch (e) { live = 0; }
+  for (var i = 0; i < n && live < BUDDY_FX_MAX; i++) {
+    var s = document.createElement('span');
+    s.className = 'buddy-fx' + (mode === 'burst' ? ' burst' : '');
+    s.textContent = glyphs[(Math.random() * glyphs.length) | 0];
+    s.style.left = (18 + Math.random() * 64).toFixed(1) + '%';
+    if (mode === 'burst') {
+      s.style.top = '38%';
+      var ang = Math.random() * Math.PI * 2, dist = 46 + Math.random() * 60;
+      if (s.style.setProperty) {
+        s.style.setProperty('--dx', (Math.cos(ang) * dist).toFixed(0) + 'px');
+        s.style.setProperty('--dy', (Math.sin(ang) * dist - 30).toFixed(0) + 'px');
+      }
+      s.style.animationDuration = (0.7 + Math.random() * 0.5).toFixed(2) + 's';
+    } else {
+      s.style.top = (4 + Math.random() * 22).toFixed(1) + '%';
+      s.style.animationDuration = (0.9 + Math.random() * 0.6).toFixed(2) + 's';
+      s.style.animationDelay = (Math.random() * 0.25).toFixed(2) + 's';
+    }
+    char.appendChild(s);
+    (function (el) {
+      setTimeout(function () { try { if (el.parentNode) el.parentNode.removeChild(el); } catch (e) {} }, 2400);
+    })(s);
+    live++;
+  }
+}
+/* pending animation: set before a re-render, played on the fresh buddy after */
+var buddyPendingAnim = null;
+function buddyFlushPending(scope) {
+  if (!buddyPendingAnim) return;
+  var p = buddyPendingAnim; buddyPendingAnim = null;
+  var char = (scope && scope.querySelector) ? scope.querySelector('[data-buddy-tap]') : buddyVisibleChar();
+  if (!char) return;
+  if (p.cls) buddyPlayAnim(char, p.cls);
+  if (p.fx) buddyFx(char, p.fx.glyphs, p.fx.n, p.fx.mode);
+}
+/* ambient scene life: slow drifting motes behind the buddy in the environment */
+function buddySpawnMotes(scene) {
+  if (!scene || !scene.appendChild) return;
+  try { if (scene.querySelector('.buddy-mote')) return; } catch (e) {}
+  var t = currentTheme();
+  var color = t === 'highway' ? 'rgba(255,255,255,.65)' : t === 'mine' ? 'rgba(190,220,255,.75)' : 'rgba(255,240,170,.75)';
+  for (var i = 0; i < 10; i++) {
+    var m = document.createElement('span');
+    m.className = 'buddy-mote';
+    m.style.left = (4 + Math.random() * 92).toFixed(1) + '%';
+    m.style.background = color;
+    if (m.style.setProperty) m.style.setProperty('--dx', ((Math.random() - 0.5) * 60).toFixed(0) + 'px');
+    m.style.animationDuration = (7 + Math.random() * 6).toFixed(1) + 's';
+    m.style.animationDelay = (-Math.random() * 12).toFixed(1) + 's';
+    scene.appendChild(m);
+  }
+}
+/* tap = squash-and-stretch hop (also the gentle nudge used by rub hint) */
+function buddyWiggle(char) {
+  buddyPlayAnim(char, 'buddy-atap');
+}
+if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('animationend', function (e) {
+    var t = e.target;
+    var char = (t && t.closest) ? t.closest('.buddy-char') : null;
+    if (!char || !char.classList) return;
+    for (var i = 0; i < BUDDY_ONE_SHOTS.length; i++) char.classList.remove(BUDDY_ONE_SHOTS[i]);
+  });
 }
 function buddySparkle(wrap, x, y) {
   if (!wrap) return;
@@ -4354,6 +4452,8 @@ function renderCompanion() {
     var bb = buddy();
     bb.tucked = !bb.tucked;
     saveState();
+    if (bb.tucked) buddyPendingAnim = { cls: null, fx: { glyphs: ['💤', '💤', 'z'], n: 5, mode: 'rise' } };
+    else buddyPendingAnim = { cls: 'buddy-awake' };
     renderCompanion();
     toast(bb.tucked ? 'Goodnight! 🌙' : 'Good morning! ☀️');
   });
@@ -4374,6 +4474,8 @@ function renderCompanion() {
       });
     })(trs[ti]);
   }
+  buddySpawnMotes(sec.querySelector('#companion-scene'));
+  buddyFlushPending(sec);
 }
 /* tap = wiggle (wakes if tucked); rub = pointer drag with sparkles */
 function wireBuddyScene(scope) {
@@ -4403,6 +4505,7 @@ function wireBuddyScene(scope) {
           b.tucked = false;
           saveState();
           toast('Good morning! ☀️');
+          buddyPendingAnim = { cls: 'buddy-awake' };
           if (scope.id === 'screen-companion') renderCompanion();
           else showScreen('home');
           return;
@@ -4417,7 +4520,12 @@ function wireBuddyScene(scope) {
 }
 function wireBuddyRubHint(scope) {
   var char = scope.querySelector('[data-buddy-tap]');
-  if (char) { buddyWiggle(char); toast('Rub ' + buddy().name + ' gently with your finger 💛'); }
+  if (char) {
+    buddyPlayAnim(char, 'buddy-arub');
+    var t = currentTheme();
+    buddyFx(char, t === 'mine' ? ['✨', '💎'] : t === 'highway' ? ['✨', '💫'] : ['✨', '💧'], 8, 'burst');
+  }
+  toast('Rub ' + buddy().name + ' gently with your finger 💛');
 }
 function buddyFeed(scope) {
   var b = buddy();
@@ -4432,7 +4540,8 @@ function buddyFeed(scope) {
   var char = scope.querySelector('[data-buddy-tap]');
   if (char) {
     char.classList.add('buddy-puff');
-    buddyWiggle(char);
+    buddyPlayAnim(char, 'buddy-afeed');
+    buddyFx(char, ['💛', '💖', '🧡'], 6, 'rise');
     setTimeout(function () { char.classList.remove('buddy-puff'); }, 4200);
   }
   toast('Yum! 😋');
@@ -4465,7 +4574,9 @@ function buddyTreatPicker() {
         saveState();
         close();
         toast('Magical treat! ✨ (1 hour)');
+        buddyPendingAnim = { cls: 'buddy-atreat', fx: { glyphs: ['✨', '🌟', '💫'], n: 8, mode: 'burst' } };
         if (currentScreen === 'companion') renderCompanion();
+        else { var tc2 = buddyVisibleChar(); if (tc2) { buddyPlayAnim(tc2, 'buddy-atreat'); buddyFx(tc2, ['✨', '🌟', '💫'], 8, 'burst'); } buddyPendingAnim = null; }
       });
     })(picks[k]);
   }
@@ -4479,13 +4590,12 @@ function buddyStarFetch(scope) {
   star.textContent = '⭐';
   scene.appendChild(star);
   var char = scope.querySelector('[data-buddy-tap]');
-  setTimeout(function () { if (char) char.classList.add('buddy-hop'); }, 450);
+  setTimeout(function () { if (char) buddyPlayAnim(char, 'buddy-achase'); }, 450);
   setTimeout(function () {
     if (star.parentNode) star.parentNode.removeChild(star);
-    if (char) char.classList.remove('buddy-hop');
     buddyWiggle(char);
     toast('Good catch! ⭐');
-  }, 1600);
+  }, 2150);
 }
 function buddyRenameModal() {
   var b = buddy();

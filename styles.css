@@ -808,6 +808,116 @@ body[data-theme="mine"].amb-night     { background: #080604; }
 .buddy-mini .buddy-accessory { font-size: .9rem; }
 .buddy-mini .buddy-zzz { font-size: 1rem; }
 
+/* ---- buddy motion: idle life + interaction animations (transform/opacity only) ---- */
+.buddy-idle { position: relative; display: inline-block; animation: buddyIdle 5s ease-in-out infinite; }
+@keyframes buddyIdle {
+  0%,100% { transform: translateY(0) scale(1,1); }
+  50% { transform: translateY(-7px) scale(1.02,.98); }
+}
+.buddy-motion { position: relative; display: inline-block; }
+/* blinking eyelids: two dark bars over the eyes, scaleY briefly every few seconds */
+.buddy-blink { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+.buddy-blink i { position: absolute; top: 54.5%; width: 9%; height: 7%; background: #1e4620; border-radius: 999px; transform: scaleY(0); transform-origin: center; animation: buddyBlink 4.6s ease-in-out infinite; }
+.buddy-blink i:first-child { left: 38.5%; }
+.buddy-blink i:last-child { left: 52.5%; }
+@keyframes buddyBlink { 0%,91%,100% { transform: scaleY(0); } 93.5%,95.5% { transform: scaleY(1); } }
+/* tucked-in sleep: eyes stay shut, breathing slows */
+.buddy-sleeping .buddy-idle { animation: buddyIdleSleep 8s ease-in-out infinite; }
+@keyframes buddyIdleSleep { 0%,100% { transform: translateY(0) scale(1,1); } 50% { transform: translateY(-3px) scale(1.015,.985); } }
+.buddy-sleeping .buddy-blink i { animation: none; transform: scaleY(1); }
+/* one-shot interaction animations (JS adds the class, animationend removes it) */
+.buddy-atap .buddy-motion { animation: buddyTap .55s ease; }
+@keyframes buddyTap {
+  0% { transform: scale(1,1) translateY(0); }
+  30% { transform: scale(1.18,.78) translateY(0); }
+  55% { transform: scale(.86,1.18) translateY(-26px); }
+  75% { transform: scale(1.06,.94) translateY(0); }
+  100% { transform: scale(1,1) translateY(0); }
+}
+.buddy-afeed .buddy-motion { animation: buddyFeedBounce .9s ease; }
+@keyframes buddyFeedBounce {
+  0%,100% { transform: translateY(0) scale(1,1); }
+  25% { transform: translateY(-30px) scale(.95,1.08); }
+  50% { transform: translateY(0) scale(1.1,.9); }
+  70% { transform: translateY(-16px) scale(.97,1.05); }
+}
+.buddy-arub .buddy-motion { animation: buddyShake .6s ease; }
+@keyframes buddyShake {
+  0%,100% { transform: translateX(0) rotate(0); }
+  20% { transform: translateX(-8px) rotate(-6deg); }
+  40% { transform: translateX(8px) rotate(6deg); }
+  60% { transform: translateX(-6px) rotate(-4deg); }
+  80% { transform: translateX(6px) rotate(4deg); }
+}
+.buddy-arub .buddy-motion::after {
+  content: ""; position: absolute; top: -8%; bottom: -8%; left: 0; width: 38%;
+  background: linear-gradient(100deg, rgba(255,255,255,0) 0%, rgba(255,255,255,.8) 50%, rgba(255,255,255,0) 100%);
+  transform: translateX(-160%) skewX(-16deg); animation: buddyShine .6s ease; pointer-events: none; z-index: 4;
+}
+@keyframes buddyShine { from { transform: translateX(-160%) skewX(-16deg); } to { transform: translateX(420%) skewX(-16deg); } }
+.buddy-atreat .buddy-motion { animation: buddyTwirl .9s ease; }
+@keyframes buddyTwirl {
+  0% { transform: rotate(0) scale(1); }
+  50% { transform: rotate(180deg) scale(1.12); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.buddy-awake .buddy-motion { animation: buddyStretch 1s ease; }
+@keyframes buddyStretch {
+  0% { transform: scale(1,1); }
+  35% { transform: scale(.82,1.28); }
+  60% { transform: scale(1.1,.92); }
+  100% { transform: scale(1,1); }
+}
+.buddy-achase .buddy-motion { animation: buddyChase 1.6s ease-in-out; }
+@keyframes buddyChase {
+  0% { transform: translate(0,0); }
+  15% { transform: translate(55px,-28px); }
+  30% { transform: translate(110px,0); }
+  45% { transform: translate(110px,-28px); }
+  62% { transform: translate(55px,0); }
+  78% { transform: translate(0,-22px); }
+  100% { transform: translate(0,0); }
+}
+.buddy-alevel .buddy-motion { animation: buddyJoy .9s ease; }
+@keyframes buddyJoy {
+  0%,100% { transform: translateY(0) scale(1,1) rotate(0); }
+  30% { transform: translateY(-44px) scale(.92,1.1) rotate(-6deg); }
+  55% { transform: translateY(0) scale(1.12,.88) rotate(0); }
+  75% { transform: translateY(-22px) scale(.96,1.06) rotate(6deg); }
+}
+.buddy-acelebrate .buddy-motion { animation: buddyCelebrate 1.1s ease; }
+@keyframes buddyCelebrate {
+  0%,100% { transform: translateY(0) rotate(0) scale(1,1); }
+  20% { transform: translateY(-36px) rotate(-8deg) scale(1.05); }
+  40% { transform: translateY(0) rotate(0) scale(1,1); }
+  60% { transform: translateY(-28px) rotate(8deg) scale(1.05); }
+  80% { transform: translateY(0) rotate(0) scale(1,1); }
+}
+/* particles: lightweight spans spawned by JS, transform/opacity only */
+.buddy-fx { position: absolute; z-index: 7; pointer-events: none; font-size: 1.25rem; line-height: 1; opacity: 0; animation: buddyFxRise 1.1s ease-out forwards; }
+@keyframes buddyFxRise {
+  0% { transform: translateY(6px) scale(.5); opacity: 0; }
+  18% { opacity: 1; }
+  100% { transform: translateY(-72px) scale(1.15); opacity: 0; }
+}
+.buddy-fx.burst { animation: buddyFxBurst .9s ease-out forwards; }
+@keyframes buddyFxBurst {
+  0% { transform: translate(0,0) scale(.4); opacity: 0; }
+  18% { opacity: 1; }
+  100% { transform: translate(var(--dx,0px),var(--dy,-40px)) scale(1); opacity: 0; }
+}
+/* ambient scene life: slow drifting motes behind the buddy */
+.buddy-mote { position: absolute; bottom: 6%; width: 6px; height: 6px; border-radius: 50%; pointer-events: none; opacity: 0; z-index: 1; animation: buddyMoteDrift 9s linear infinite; }
+@keyframes buddyMoteDrift {
+  0% { transform: translate(0,0); opacity: 0; }
+  12% { opacity: .55; }
+  80% { opacity: .35; }
+  100% { transform: translate(var(--dx,10px),-170px); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .buddy-idle, .buddy-blink i, .buddy-mote { animation: none !important; }
+}
+
 /* ---- buddy XP bar ---- */
 .buddy-xp { height: 16px; border-radius: 999px; background: var(--inset); border: 1px solid var(--border); overflow: hidden; margin: 10px auto; max-width: 420px; }
 .buddy-xp.slim { height: 9px; margin: 6px 0 0; max-width: 190px; }
