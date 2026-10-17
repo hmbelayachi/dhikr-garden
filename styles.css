@@ -781,6 +781,7 @@ body[data-theme="mine"].amb-night     { background: #080604; }
   touch-action: pan-y;
 }
 .buddy-emoji { display: inline-block; line-height: 1; }
+.buddy-emoji img { display: block; }
 .buddy-accessory { position: absolute; top: 0; right: 2px; font-size: 1.3rem; }
 .buddy-equipped { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); font-size: 1.1rem; white-space: nowrap; }
 .buddy-zzz { position: absolute; top: -6px; left: -2px; font-size: 1.4rem; animation: zzz 2.4s ease-in-out infinite; }

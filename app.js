@@ -1592,6 +1592,9 @@ function renderHome() {
   html += '<div class="home-head"><h1 class="giant">Home</h1>' +
     '<span class="today-badge">' + fmtNum(todayCount()) + '<small>today</small></span></div>';
 
+  // buddy preview (compact) — very top of home, above the theme cards
+  try { html += buddyPreviewHtml(); } catch (e) { /* buddy optional */ }
+
   // while-you-were-away (offline maturation notice)
   if (away.length) {
     var names = away.slice(0, 4).map(function (f) { return esc(f.name); }).join(', ');
@@ -1610,9 +1613,6 @@ function renderHome() {
     '<div class="stat"><b>' + fmtNum(S.lifetime) + '</b><span>lifetime</span></div>' +
     '<div class="stat"><b>' + practiced + '</b><span>phrases</span></div></div>' +
     '<button class="btn-gold btn-block" data-go-bloom style="margin-top:12px">Tend your blooms 🌸</button></section>';
-
-  // buddy preview (compact)
-  try { html += buddyPreviewHtml(); } catch (e) { /* buddy optional */ }
 
   // theme picker
   html += themePickerCard();
@@ -4164,7 +4164,7 @@ function buddyCharHtml() {
   if (treats.indexOf('trail') >= 0) cls += ' treat-trail';
   if (treats.indexOf('cheeks') >= 0) cls += ' treat-cheeks';
   var html = '<div class="' + cls + '" data-buddy-tap="1" role="button" tabindex="0" aria-label="' + esc(b.name) + ', your companion, level ' + b.level + '">';
-  html += '<span class="buddy-emoji" style="font-size:' + size + 'px">' + BUDDY_STAGE_EMOJI[stage - 1] + '</span>';
+  html += '<span class="buddy-emoji"><img class="buddy-img" src="buddy.png" alt="' + esc(b.name) + '" style="width:' + size + 'px;height:' + size + 'px"></span>';
   html += '<span class="buddy-accessory">' + buddyThemeAccessory() + '</span>';
   var eq = b.equipped || [], shown = 0;
   if (eq.length) {
