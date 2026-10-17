@@ -4231,7 +4231,8 @@ function buddyXpBarHtml(slim) {
 /* Road to 500: winding path, 10 sealed "?" chests at 50..500, traveling pin */
 function roadTo500Html() {
   var b = buddy();
-  var html = '<div class="card"><span class="kicker k-gold">Road to 500</span><div class="road">';
+  var html = '<div class="card"><span class="kicker k-sage">Companion Journey</span>' +
+    '<h3 style="margin:4px 0 10px">Road to 500</h3><div class="road">';
   for (var s = 1; s <= 10; s++) {
     var lvl = s * 50;
     var reached = b.level >= lvl;
@@ -4251,7 +4252,7 @@ function treasuresHtml() {
   var b = buddy();
   var secrets = [];
   for (var si = 0; si < b.treasures.length; si++) { if (b.treasures[si] !== 'tr-goldcap') secrets.push(b.treasures[si]); }
-  var html = '<div class="card"><div class="row-between" style="align-items:center"><div>' +
+  var html = '<div class="card" id="companion-treasures"><div class="row-between" style="align-items:center"><div>' +
     '<span class="kicker k-gold">Treasures</span>' +
     '<h3 style="margin:4px 0 0">' + secrets.length + ' of 18 found</h3></div></div>' +
     '<div class="treasure-grid">';
@@ -4284,41 +4285,64 @@ function buddyEnvHeroHtml() {
   html += '</section>';
   return html;
 }
-/* ---- companion screen ---- */
+/* ---- companion screen (mirrors the chat app's companion layout) ---- */
 function renderCompanion() {
   var sec = el('screen-companion');
   if (!sec) return;
   buddyCheckDevolution();
   var b = buddy();
-  var html = '<button class="backlink" data-go="home">← Home</button>' +
-    '<span class="kicker k-sage">Your companion</span>' +
-    '<h1 class="giant">' + esc(b.name) + '</h1>';
-  html += '<section class="card companion-stage"><div class="companion-scene" id="companion-scene">' + buddyCharHtml() + '</div>' +
-    '<div style="text-align:center"><div class="buddy-name">' + esc(b.name) + ' · Level ' + b.level + ' of 500</div>' +
-    '<div class="buddy-stage">' + esc(buddyStageName(b.level)) + ' · Stage ' + buddyStage(b.level) + ' of 10</div></div>' +
-    buddyXpBarHtml(false);
-  if (buddyIsRadiant()) html += '<p class="kicker k-gold" style="text-align:center">✨ Radiant Day — double levels till midnight</p>';
-  else if (buddyMissesYou()) html += '<p class="muted" style="text-align:center">Your companion misses you 💛</p>';
-  html += '<div class="btn-row" style="justify-content:center"><button class="btn-ghost" data-buddy-rename>Rename</button></div></section>';
-  html += '<section class="card"><span class="kicker k-sage">Care</span><div class="buddy-tiles">' +
-    '<button class="tile" data-buddy-rub>💧<b>' + esc(buddyCareLabel()) + '</b><i>rub gently</i></button>' +
-    '<button class="tile" data-buddy-treats>🍯<b>Treats</b><i>1-hour magic</i></button>' +
-    '<button class="tile" data-buddy-sleep>' + (b.tucked ? '🌅' : '🌙') + '<b>' + (b.tucked ? 'Wake up' : 'Goodnight') + '</b><i>' + (b.tucked ? 'rise & shine' : 'tuck in') + '</i></button>' +
-    '<button class="tile" data-buddy-fetch>⭐<b>Star fetch</b><i>play together</i></button>' +
-    '</div></section>';
+  var t = currentTheme();
+  var scene = t === 'highway' ? highwayScene() : t === 'mine' ? mineScene() : gardenScene();
+  var radiant = buddyIsRadiant();
+  /* 1. environment scene hero with the big illustrated buddy */
+  var html = '<button class="backlink" data-go="home">← Home</button>';
+  html += '<section class="card buddy-env-hero companion-env"><div class="buddy-env-scene" id="companion-scene">' + scene +
+    '<div class="buddy-env-char">' + buddyCharHtml(170) + '</div>';
+  if (radiant) html += '<div class="buddy-env-badge">✨ Radiant Day · 2× levels</div>';
+  html += '</div><div class="buddy-env-plaque"><b>' + esc(b.name) + '</b>' +
+    '<div class="muted">Level ' + b.level + ' of 500 · ' + esc(buddyStageName(b.level)) + '</div></div>';
+  if (!radiant && buddyMissesYou()) html += '<p class="muted" style="text-align:center;margin:4px 16px 14px">Your companion misses you 💛</p>';
+  html += '</section>';
+  /* 2. care rows: theme rub + treats, goodnight + star fetch */
+  var careIcon = t === 'highway' ? '✨' : t === 'mine' ? '🖌️' : '💧';
+  html += '<section class="card"><div class="care-rows"><div class="care-row">' +
+    '<button class="care-tile" data-buddy-rub><span class="care-ic">' + careIcon + '</span>' +
+    '<span class="care-tx"><b>' + esc(buddyCareLabel()) + '</b><i>Hands-on care</i></span></button>' +
+    '<button class="care-tile" data-buddy-treats><span class="care-ic">🍯</span>' +
+    '<span class="care-tx"><b>Treats</b><i>Pick a 1-hour effect</i></span></button></div>' +
+    '<div class="care-row">' +
+    '<button class="care-tile" data-buddy-sleep><span class="care-ic">' + (b.tucked ? '🌅' : '🌙') + '</span>' +
+    '<span class="care-tx"><b>' + (b.tucked ? 'Wake up' : 'Goodnight') + '</b><i>' + (b.tucked ? 'rise & shine' : 'Tuck your buddy in') + '</i></span></button>' +
+    '<button class="care-tile" data-buddy-fetch><span class="care-ic">⭐</span>' +
+    '<span class="care-tx"><b>Star fetch</b><i>Toss and bring it back</i></span></button></div></div></section>';
+  /* 3. snack jar */
   html += '<section class="card"><div class="row-between" style="align-items:center"><div>' +
     '<span class="kicker k-gold">🍯 Snack jar</span>' +
     '<div style="font-size:1.6rem;font-weight:900"><span id="snack-count">' + fmtNum(b.snacks) + '</span> <small class="muted">snacks</small></div></div>' +
     '<button class="btn-gold" data-buddy-feed' + (b.snacks >= 10 ? '' : ' disabled') + '>Feed · 10 🍯</button></div>' +
     '<p class="muted" style="margin:8px 0 0">Feeding is just for fun — ' + esc(b.name) + ' grows from your dhikr, not from snacks.</p></section>';
-  html += roadTo500Html();
+  /* 4. rename + treasures tiles */
+  var secrets = 0, si;
+  for (si = 0; si < b.treasures.length; si++) { if (b.treasures[si] !== 'tr-goldcap') secrets++; }
+  html += '<div class="duo-tiles">' +
+    '<div class="card duo-tile"><div><b>' + esc(b.name) + '</b><div class="muted">Level ' + b.level + ' of 500</div></div>' +
+    '<button class="linklike" data-buddy-rename>Rename</button></div>' +
+    '<div class="card duo-tile"><div><b>Treasures</b><div class="muted">' + secrets + ' of 18 found</div></div>' +
+    '<button class="linklike" data-scroll-treasures>Open</button></div></div>';
+  /* 5. radiant day banner */
+  if (radiant) html += '<div class="radiant-banner">✨ <b>Radiant Day!</b> ' + esc(b.name) +
+    ' is glowing golden, and every 33 dhikr earns 2 levels until midnight.</div>';
+  /* 6. full treasures shelf, then the companion journey */
   html += treasuresHtml();
+  html += roadTo500Html();
   sec.innerHTML = html;
   var gos = sec.querySelectorAll('[data-go]');
   for (var g = 0; g < gos.length; g++) {
     (function (x) { x.addEventListener('click', function () { showScreen(x.getAttribute('data-go')); }); })(gos[g]);
   }
   wireBuddyScene(sec);
+  var st = sec.querySelector('[data-scroll-treasures]');
+  if (st) st.addEventListener('click', function () { var tg = document.getElementById('companion-treasures'); if (tg) tg.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   var rn = sec.querySelector('[data-buddy-rename]');
   if (rn) rn.addEventListener('click', buddyRenameModal);
   var rub = sec.querySelector('[data-buddy-rub]');
